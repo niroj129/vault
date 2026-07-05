@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Game Points</title>
+  <style>
+    :root {
+      --bg: #0f172a; --card: #ffffff; --muted: #64748b; --line: #e2e8f0;
+      --brand: #4f46e5; --brand2: #6366f1; --ok: #16a34a; --low: #dc2626;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif; margin: 0;
+      background: #f1f5f9; color: #0f172a;
+    }
+    .wrap { max-width: 920px; margin: 0 auto; padding: 0 1rem 3rem; }
+    header.topbar {
+      background: linear-gradient(90deg, var(--brand), var(--brand2));
+      color: #fff; padding: .85rem 0; margin-bottom: 1.5rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,.08);
+    }
+    header.topbar .wrap { display: flex; align-items: center; gap: 1.25rem; }
+    header.topbar .logo { font-weight: 700; font-size: 1.1rem; }
+    header.topbar a { color: #e0e7ff; text-decoration: none; font-weight: 500; }
+    header.topbar a:hover { color: #fff; }
+    header.topbar .spacer { flex: 1; }
+    h1 { font-size: 1.5rem; margin: .2rem 0 .4rem; }
+    p.sub { color: var(--muted); margin-top: 0; }
+    a { color: var(--brand); }
+    .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+      padding: 1.25rem; margin-bottom: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,.04);
+    }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: left; padding: .7rem .65rem; border-bottom: 1px solid var(--line); }
+    th { font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+    tbody tr:hover { background: #f8fafc; }
+    tfoot th { font-size: .9rem; color: #0f172a; border-top: 2px solid var(--line); }
+    .pill { display: inline-block; padding: .2rem .6rem; border-radius: 999px; font-weight: 700; font-size: .9rem; }
+    .pill.ok { background: #dcfce7; color: var(--ok); }
+    .pill.low { background: #fee2e2; color: var(--low); }
+    input {
+      padding: .5rem .6rem; border: 1px solid #cbd5e1; border-radius: 8px;
+      font-size: .95rem; background: #fff;
+    }
+    input:focus { outline: 2px solid var(--brand2); outline-offset: 0; border-color: var(--brand2); }
+    label { display: block; margin-bottom: .3rem; font-weight: 600; font-size: .82rem; color: #334155; }
+    button {
+      padding: .5rem .85rem; border: 0; border-radius: 8px; background: var(--brand);
+      color: #fff; font-size: .9rem; font-weight: 600; cursor: pointer;
+    }
+    button:hover { background: var(--brand2); }
+    button.ghost { background: #eef2ff; color: var(--brand); }
+    button.warn { background: #f59e0b; }
+    button.warn:hover { background: #d97706; }
+    button.danger { background: #ef4444; }
+    button.danger:hover { background: #dc2626; }
+    .inline { display: inline-flex; gap: .35rem; align-items: center; flex-wrap: wrap; }
+    .flash { background: #fffbeb; border: 1px solid #fcd34d; color: #92400e;
+             padding: .7rem .9rem; border-radius: 10px; margin-bottom: 1rem; }
+    small { color: var(--muted); }
+  </style>
+</head>
+<body>
+  {% if session.get('uid') %}
+  <header class="topbar">
+    <div class="wrap">
+      <span class="logo">🎮 Game Points</span>
+      <a href="{{ url_for('dashboard') }}">Dashboard</a>
+      <a href="{{ url_for('settings') }}">Settings</a>
+      <span class="spacer"></span>
+      <a href="{{ url_for('logout') }}">Log out</a>
+    </div>
+  </header>
+  {% endif %}
+  <div class="wrap">
+    {% with messages = get_flashed_messages() %}
+      {% for m in messages %}<div class="flash">{{ m }}</div>{% endfor %}
+    {% endwith %}
+    {% block body %}{% endblock %}
+  </div>
+</body>
+</html>

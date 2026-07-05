@@ -1,0 +1,108 @@
+{% extends "admin/base.html" %}
+{% set page_title = 'Games' %}
+{% block content %}
+<div class="toolbar">
+  <button class="btn-gold" onclick="openGameForm()"><i class="fa-solid fa-plus"></i> Add Game</button>
+</div>
+
+<div class="card">
+  <table class="data-table">
+    <thead><tr><th>Image</th><th>Name</th><th>Category</th><th>Status</th><th>Featured</th><th>Plays</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for g in games %}
+      <tr>
+        <td>{% if g.image %}<img class="row-thumb" src="{{ url_for('static', filename=g.image) }}">{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td><strong>{{ g.name }}</strong></td>
+        <td>{{ g.category or '—' }}</td>
+        <td><span class="badge {{ 'ok' if g.status=='active' else 'off' }}">{{ g.status }}</span></td>
+        <td>{% if g.featured %}<i class="fa-solid fa-star gold-text"></i>{% else %}—{% endif %}</td>
+        <td>{{ g.clicks }}</td>
+        <td class="row-actions">
+          <button class="icon-btn" title="Edit"
+            data-game='{{ {"id":g.id,"name":g.name,"category_id":g.category_id,"description":g.description,"features":g.features,"download_info":g.download_info,"play_url":g.play_url,"user_link":g.user_link,"agent_link":g.agent_link,"faqs":g.faqs,"meta_title":g.meta_title,"meta_description":g.meta_description,"meta_keywords":g.meta_keywords,"status":g.status,"featured":g.featured,"is_new":g.is_new,"sort_order":g.sort_order}|tojson }}'
+            onclick="editGame(this)"><i class="fa-solid fa-pen"></i></button>
+          <form method="post" action="{{ url_for('admin.toggle_game', gid=g.id) }}" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="icon-btn" title="Toggle"><i class="fa-solid fa-power-off"></i></button>
+          </form>
+          <form method="post" action="{{ url_for('admin.delete_game', gid=g.id) }}" class="inline" onsubmit="return confirm('Delete this game?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="icon-btn danger" title="Delete"><i class="fa-solid fa-trash"></i></button>
+          </form>
+        </td>
+      </tr>
+      {% else %}<tr><td colspan="7" class="muted">No games yet.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="modal" id="gameModal">
+  <div class="modal-card">
+    <div class="modal-head"><h3 id="gameModalTitle">Add Game</h3><button class="icon-btn" onclick="closeModal('gameModal')">&times;</button></div>
+    <form method="post" action="{{ url_for('admin.save_game') }}" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="id" id="g_id">
+      <label>Game Name<input type="text" name="name" id="g_name" required></label>
+      <label>Category
+        <select name="category_id" id="g_category_id">
+          <option value="">— none —</option>
+          {% for c in categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Description<textarea name="description" id="g_description" rows="3"></textarea></label>
+      <label>Features (one per line)<textarea name="features" id="g_features" rows="3" placeholder="100+ slot games&#10;Daily bonuses"></textarea></label>
+      <label>FAQs (one per line: <em>Question | Answer</em>)<textarea name="faqs" id="g_faqs" rows="3" placeholder="How do I download? | Use the user link above."></textarea></label>
+      <label>Download / Access Info<input type="text" name="download_info" id="g_download_info"></label>
+      <div class="form-row">
+        <label>User Game Link<input type="url" name="user_link" id="g_user_link" placeholder="https://..."></label>
+        <label>Agent Game Link<input type="url" name="agent_link" id="g_agent_link" placeholder="https://..."></label>
+        <label>Generic URL<input type="url" name="play_url" id="g_play_url" placeholder="https://..."></label>
+      </div>
+      <div class="form-row">
+        <label>Card Image<input type="file" name="image" accept="image/*"></label>
+        <label>Logo<input type="file" name="logo" accept="image/*"></label>
+        <label>Banner<input type="file" name="banner" accept="image/*"></label>
+      </div>
+      <label>Screenshots (multiple)<input type="file" name="screenshots" accept="image/*" multiple></label>
+      <fieldset class="seo-fieldset">
+        <legend>SEO</legend>
+        <label>Meta Title<input type="text" name="meta_title" id="g_meta_title"></label>
+        <label>Meta Description<textarea name="meta_description" id="g_meta_description" rows="2"></textarea></label>
+        <label>Meta Keywords<input type="text" name="meta_keywords" id="g_meta_keywords"></label>
+      </fieldset>
+      <div class="form-row">
+        <label>Sort order<input type="number" name="sort_order" id="g_sort_order" value="0"></label>
+        <label class="checkline"><input type="checkbox" name="featured" id="g_featured"> Featured</label>
+        <label class="checkline"><input type="checkbox" name="is_new" id="g_is_new"> New</label>
+        <label class="checkline"><input type="checkbox" name="status" id="g_status" value="active" checked> Active</label>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn-ghost" onclick="closeModal('gameModal')">Cancel</button>
+        <button type="submit" class="btn-gold">Save Game</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function openGameForm(){ resetForm('gameModal'); document.getElementById('gameModalTitle').textContent='Add Game';
+  document.getElementById('g_status').checked=true; openModal('gameModal'); }
+function editGame(btn){
+  const g = JSON.parse(btn.dataset.game);
+  document.getElementById('gameModalTitle').textContent='Edit Game';
+  g_id.value=g.id; g_name.value=g.name; g_category_id.value=g.category_id||'';
+  g_description.value=g.description||''; g_features.value=g.features||'';
+  g_download_info.value=g.download_info||''; g_play_url.value=g.play_url||'';
+  g_user_link.value=g.user_link||''; g_agent_link.value=g.agent_link||'';
+  g_meta_title.value=g.meta_title||''; g_meta_description.value=g.meta_description||'';
+  g_meta_keywords.value=g.meta_keywords||'';
+  let faqLines='';
+  try{ (JSON.parse(g.faqs||'[]')).forEach(f=>faqLines+=f.q+' | '+f.a+'\n'); }catch(e){}
+  g_faqs.value=faqLines.trim();
+  g_sort_order.value=g.sort_order||0; g_featured.checked=!!g.featured;
+  g_is_new.checked=!!g.is_new; g_status.checked=(g.status==='active');
+  openModal('gameModal');
+}
+</script>
+{% endblock %}

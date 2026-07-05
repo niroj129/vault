@@ -1,0 +1,47 @@
+{% extends "admin/base.html" %}
+{% set page_title = 'Settings' %}
+{% block content %}
+<form method="post" action="{{ url_for('admin.settings') }}" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="admin-cols">
+    <div class="card">
+      <h3><i class="fa-solid fa-signature"></i> Branding</h3>
+      <label>Website Name<input name="site_name" value="{{ s.site_name }}"></label>
+      <label>Tagline<input name="tagline" value="{{ s.tagline }}"></label>
+      <label>Logo{% if s.logo %} <img class="row-thumb" src="{{ url_for('static', filename=s.logo) }}">{% endif %}<input type="file" name="logo_file" accept="image/*"></label>
+      <label>Favicon<input type="file" name="favicon_file" accept="image/*"></label>
+      <label>Social Preview Image<input type="file" name="social_file" accept="image/*"></label>
+    </div>
+    <div class="card">
+      <h3><i class="fa-solid fa-palette"></i> Theme Colors</h3>
+      <label>Primary (background)<input type="color" name="color_primary" value="{{ s.color_primary }}"></label>
+      <label>Accent (gold)<input type="color" name="color_accent" value="{{ s.color_accent }}"></label>
+      <label>Accent 2<input type="color" name="color_accent2" value="{{ s.color_accent2 }}"></label>
+      <label class="checkline warn"><input type="checkbox" name="maintenance_mode" {{ 'checked' if s.maintenance_mode=='1' }}> Maintenance Mode (site hidden from non-admins)</label>
+    </div>
+  </div>
+  <div class="admin-cols">
+    <div class="card">
+      <h3><i class="fa-solid fa-address-book"></i> Business & Contact</h3>
+      <label>Business Name<input name="business_name" value="{{ s.business_name }}"></label>
+      <label>Contact Email<input name="contact_email" value="{{ s.contact_email }}"></label>
+      <label>Contact Phone<input name="contact_phone" value="{{ s.contact_phone }}"></label>
+      <label>WhatsApp<input name="contact_whatsapp" value="{{ s.contact_whatsapp }}" placeholder="+1..."></label>
+      <label>Address<input name="contact_address" value="{{ s.contact_address }}"></label>
+      <label>Map Embed (iframe HTML)<textarea name="map_embed" rows="2">{{ s.map_embed }}</textarea></label>
+      <label>Facebook URL<input name="social_facebook" value="{{ s.social_facebook }}"></label>
+      <label>Instagram URL<input name="social_instagram" value="{{ s.social_instagram }}"></label>
+      <label>Telegram URL<input name="social_telegram" value="{{ s.social_telegram }}"></label>
+      <label>Twitter / X URL<input name="social_twitter" value="{{ s.social_twitter }}"></label>
+    </div>
+    <div class="card">
+      <h3><i class="fa-solid fa-sliders"></i> Regional & Integrations</h3>
+      <label>Time Zone<input name="timezone" value="{{ s.timezone }}"></label>
+      <label>Currency Symbol<input name="currency" value="{{ s.currency }}"></label>
+      <label>Google Analytics ID<input name="analytics_id" value="{{ s.analytics_id }}" placeholder="G-XXXXXXX"></label>
+      <label>Google Search Console Verification<input name="gsc_verification" value="{{ s.gsc_verification }}"></label>
+    </div>
+  </div>
+  <div class="toolbar right"><button class="btn-gold lg"><i class="fa-solid fa-floppy-disk"></i> Save Settings</button></div>
+</form>
+{% endblock %}

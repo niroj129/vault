@@ -1,0 +1,21 @@
+{% extends "admin/base.html" %}
+{% set page_title = 'Reports' %}
+{% block content %}
+<p class="muted">Preview of each report (latest 50 rows). Export full data as CSV (opens in Excel/Sheets) or use your browser's Print → Save as PDF on this page.</p>
+{% for key, rep in data.items() %}
+<div class="card">
+  <div class="card-head">
+    <h3><i class="fa-solid fa-file-lines"></i> {{ rep.title }}</h3>
+    <a class="btn-ghost sm" href="{{ url_for('reports.export_csv', report=key) }}"><i class="fa-solid fa-file-csv"></i> Export CSV</a>
+  </div>
+  <table class="data-table">
+    <thead><tr>{% for h in rep.headers %}<th>{{ h }}</th>{% endfor %}</tr></thead>
+    <tbody>
+      {% for row in rep.rows %}
+      <tr>{% for k in row.keys() %}<td>{{ row[k] }}</td>{% endfor %}</tr>
+      {% else %}<tr><td colspan="{{ rep.headers|length }}" class="muted">No data.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endfor %}
+{% endblock %}

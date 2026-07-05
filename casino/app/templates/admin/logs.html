@@ -1,0 +1,30 @@
+{% extends "admin/base.html" %}
+{% set page_title = 'Activity & Login Logs' %}
+{% block content %}
+<div class="card">
+  <h3><i class="fa-solid fa-right-to-bracket"></i> Login Activity</h3>
+  <table class="data-table">
+    <thead><tr><th>User</th><th>Result</th><th>IP</th><th>Agent</th><th>Time</th></tr></thead>
+    <tbody>
+      {% for l in logs %}
+      <tr>
+        <td>{{ l.username }}</td>
+        <td><span class="badge {{ 'ok' if l.success else 'off' }}">{{ 'success' if l.success else 'failed' }}</span></td>
+        <td>{{ l.ip }}</td><td class="muted small">{{ l.user_agent[:50] }}</td><td class="muted">{{ l.created_at }}</td>
+      </tr>
+      {% else %}<tr><td colspan="5" class="muted">No login records.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+<div class="card">
+  <h3><i class="fa-solid fa-clock-rotate-left"></i> Admin Activity</h3>
+  <table class="data-table">
+    <thead><tr><th>User</th><th>Action</th><th>Detail</th><th>Time</th></tr></thead>
+    <tbody>
+      {% for a in activity %}
+      <tr><td>{{ a.username }}</td><td><span class="tag">{{ a.action }}</span></td><td>{{ a.detail }}</td><td class="muted">{{ a.created_at }}</td></tr>
+      {% else %}<tr><td colspan="4" class="muted">No activity.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

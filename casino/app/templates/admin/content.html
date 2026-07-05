@@ -1,0 +1,28 @@
+{% extends "admin/base.html" %}
+{% set page_title = 'Content' %}
+{% block content %}
+<form method="post" action="{{ url_for('admin.content') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="card">
+    <h3><i class="fa-solid fa-image"></i> Homepage Banner</h3>
+    <label>Banner Title<input name="banner_title" value="{{ c.banner_title }}"></label>
+    <label>Banner Subtitle<input name="banner_subtitle" value="{{ c.banner_subtitle }}"></label>
+    <label>Banner Button Text<input name="banner_cta" value="{{ c.banner_cta }}"></label>
+  </div>
+  <div class="admin-cols">
+    <div class="card"><h3><i class="fa-solid fa-circle-info"></i> About</h3>
+      <textarea name="about" rows="5">{{ c.about }}</textarea></div>
+    <div class="card"><h3><i class="fa-solid fa-headset"></i> Contact</h3>
+      <textarea name="contact" rows="5">{{ c.contact }}</textarea></div>
+  </div>
+  <div class="card"><h3><i class="fa-solid fa-shoe-prints"></i> Footer Text</h3>
+    <textarea name="footer" rows="2">{{ c.footer }}</textarea></div>
+  <div class="admin-cols">
+    <div class="card"><h3><i class="fa-solid fa-file-contract"></i> Terms & Conditions</h3>
+      <textarea name="terms" rows="8">{{ c.terms }}</textarea></div>
+    <div class="card"><h3><i class="fa-solid fa-user-shield"></i> Privacy Policy</h3>
+      <textarea name="privacy" rows="8">{{ c.privacy }}</textarea></div>
+  </div>
+  <div class="toolbar right"><button class="btn-gold lg"><i class="fa-solid fa-floppy-disk"></i> Save Content</button></div>
+</form>
+{% endblock %}

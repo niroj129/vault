@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="wrap section">
+  <div class="page-head"><h1><i class="fa-solid fa-trophy"></i> Winners</h1></div>
+  {% if winners %}
+  <div class="winner-grid">
+    {% for w in winners %}
+    <div class="winner-card {% if loop.first %}latest{% endif %}">
+      {% if loop.first %}<span class="pill gold-pill">Latest</span>{% endif %}
+      <div class="winner-avatar">
+        {% if w.photo %}<img src="{{ url_for('static', filename=w.photo) }}" alt="{{ w.name }}">{% else %}<span>🏆</span>{% endif %}
+      </div>
+      <h4>{{ w.name }}</h4>
+      <div class="win-amount">{{ currency }}{{ w.amount|money }}</div>
+      {% if w.game %}<span class="tag">{{ w.game }}</span>{% endif %}
+      <span class="muted small">{{ w.win_date }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty"><i class="fa-solid fa-trophy"></i><p>No winners recorded yet.</p></div>
+  {% endif %}
+</section>
+{% endblock %}

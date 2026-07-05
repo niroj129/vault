@@ -1,0 +1,49 @@
+{% extends "admin/base.html" %}
+{% set page_title = 'Categories' %}
+{% block content %}
+<div class="admin-cols">
+  <div class="card">
+    <h3 id="catFormTitle"><i class="fa-solid fa-plus"></i> Add Category</h3>
+    <form method="post" action="{{ url_for('admin.save_category') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="id" id="c_id">
+      <label>Name<input type="text" name="name" id="c_name" required></label>
+      <label>Icon (Font Awesome class)<input type="text" name="icon" id="c_icon" placeholder="fa-dice" value="fa-dice"></label>
+      <label>Sort order<input type="number" name="sort_order" id="c_sort_order" value="0"></label>
+      <button class="btn-gold" type="submit">Save Category</button>
+      <button class="btn-ghost" type="button" onclick="resetCat()">Clear</button>
+    </form>
+  </div>
+  <div class="card">
+    <table class="data-table">
+      <thead><tr><th>Icon</th><th>Name</th><th>Games</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for c in categories %}
+        <tr>
+          <td><i class="fa-solid {{ c.icon }} gold-text"></i></td>
+          <td><strong>{{ c.name }}</strong><br><small class="muted">{{ c.slug }}</small></td>
+          <td>{{ c.game_count }}</td>
+          <td class="row-actions">
+            <button class="icon-btn" data-cat='{{ {"id":c.id,"name":c.name,"icon":c.icon,"sort_order":c.sort_order}|tojson }}' onclick="editCat(this)"><i class="fa-solid fa-pen"></i></button>
+            <form method="post" action="{{ url_for('admin.delete_category', cid=c.id) }}" class="inline" onsubmit="return confirm('Delete category?')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="icon-btn danger"><i class="fa-solid fa-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+        {% else %}<tr><td colspan="4" class="muted">No categories.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function resetCat(){ c_id.value=''; c_name.value=''; c_icon.value='fa-dice'; c_sort_order.value=0;
+  document.getElementById('catFormTitle').innerHTML='<i class="fa-solid fa-plus"></i> Add Category'; }
+function editCat(btn){ const c=JSON.parse(btn.dataset.cat); c_id.value=c.id; c_name.value=c.name;
+  c_icon.value=c.icon; c_sort_order.value=c.sort_order;
+  document.getElementById('catFormTitle').innerHTML='<i class="fa-solid fa-pen"></i> Edit Category';
+  window.scrollTo({top:0,behavior:'smooth'}); }
+</script>
+{% endblock %}

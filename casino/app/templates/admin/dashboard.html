@@ -1,0 +1,45 @@
+{% extends "admin/base.html" %}
+{% set page_title = 'Dashboard' %}
+{% block content %}
+<div class="stat-grid">
+  <div class="widget"><i class="fa-solid fa-users"></i><div><span class="w-val">{{ stats.users }}</span><span class="w-lab">Total Users</span></div></div>
+  <div class="widget"><i class="fa-solid fa-user-check"></i><div><span class="w-val">{{ stats.active_users }}</span><span class="w-lab">Active Users</span></div></div>
+  <div class="widget"><i class="fa-solid fa-dice"></i><div><span class="w-val">{{ stats.games }}</span><span class="w-lab">Total Games</span></div></div>
+  <div class="widget"><i class="fa-solid fa-layer-group"></i><div><span class="w-val">{{ stats.categories }}</span><span class="w-lab">Categories</span></div></div>
+  <div class="widget gold"><i class="fa-solid fa-sack-dollar"></i><div><span class="w-val">{{ currency }}{{ stats.daily_profit|money }}</span><span class="w-lab">Today's Profit</span></div></div>
+  <div class="widget gold"><i class="fa-solid fa-chart-line"></i><div><span class="w-val">{{ currency }}{{ stats.monthly_profit|money }}</span><span class="w-lab">Monthly Profit</span></div></div>
+</div>
+
+<div class="admin-cols">
+  <div class="card">
+    <h3><i class="fa-solid fa-chart-area"></i> Profit — Last 14 Days</h3>
+    <canvas id="profitChart" height="120"></canvas>
+  </div>
+  <div class="card">
+    <h3><i class="fa-solid fa-crown"></i> Daily Winner</h3>
+    {% if winner %}
+      <div class="mini-winner">
+        {% if winner.photo %}<img src="{{ url_for('static', filename=winner.photo) }}">{% else %}<span class="mw-emoji">🏆</span>{% endif %}
+        <div><strong>{{ winner.name }}</strong><br><span class="gold-text">{{ currency }}{{ winner.amount|money }}</span><br><small class="muted">{{ winner.game }} · {{ winner.win_date }}</small></div>
+      </div>
+    {% else %}<p class="muted">No winner yet. <a href="{{ url_for('admin.winners') }}">Add one</a>.</p>{% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <h3><i class="fa-solid fa-clock-rotate-left"></i> Recent Activity</h3>
+  <table class="data-table">
+    <thead><tr><th>User</th><th>Action</th><th>Detail</th><th>When</th></tr></thead>
+    <tbody>
+      {% for a in activities %}
+      <tr><td>{{ a.username }}</td><td><span class="tag">{{ a.action }}</span></td><td>{{ a.detail }}</td><td class="muted">{{ a.created_at }}</td></tr>
+      {% else %}<tr><td colspan="4" class="muted">No activity yet.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  drawLineChart('profitChart', {{ chart_labels|tojson }}, {{ chart_values|tojson }}, 'Profit');
+</script>
+{% endblock %}

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="wrap section">
+  <div class="page-head"><h1>Welcome, {{ current_user.full_name or current_user.username }}</h1></div>
+
+  <div class="dash-cards">
+    <a class="dash-card" href="{{ url_for('public.games') }}"><i class="fa-solid fa-dice"></i><span>Browse Games</span></a>
+    <a class="dash-card" href="{{ url_for('public.winners') }}"><i class="fa-solid fa-trophy"></i><span>Winners</span></a>
+    <a class="dash-card" href="{{ url_for('chat.room') }}"><i class="fa-solid fa-comments"></i><span>Chat</span></a>
+    <a class="dash-card" href="#password"><i class="fa-solid fa-key"></i><span>Change Password</span></a>
+  </div>
+
+  {% if winner %}
+  <div class="winner-banner compact">
+    <div class="winner-badge"><i class="fa-solid fa-crown"></i></div>
+    <div class="winner-info"><span class="pill gold-pill">Daily Winner</span>
+      <h3>{{ winner.name }}</h3><p>won <strong>{{ currency }}{{ winner.amount|money }}</strong> · {{ winner.win_date }}</p></div>
+  </div>
+  {% endif %}
+
+  {% if announcements %}
+  <div class="section-head"><h2><i class="fa-solid fa-bullhorn"></i> Announcements</h2></div>
+  <div class="announce-strip">
+    {% for a in announcements %}
+    <div class="announce-card {% if a.pinned %}pinned{% endif %}"><h4>{{ a.title }}</h4><p>{{ a.body }}</p></div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="section-head"><h2><i class="fa-solid fa-dice"></i> Games</h2></div>
+  <div class="game-grid">{% for g in games %}{% include "_game_card.html" %}{% endfor %}</div>
+
+  <div class="card" id="password" style="margin-top:2rem;max-width:480px">
+    <h3><i class="fa-solid fa-key"></i> Change Password</h3>
+    <form method="post" action="{{ url_for('auth.change_password') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Current password<input type="password" name="current_password" required></label>
+      <label>New password<input type="password" name="new_password" required></label>
+      <label>Confirm new password<input type="password" name="confirm_password" required></label>
+      <button class="btn-gold" type="submit">Update Password</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

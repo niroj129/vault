@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="wrap section">
+  <div class="page-head"><h1><i class="fa-solid fa-user-tie"></i> Agent Portal — {{ current_user.full_name or current_user.username }}</h1></div>
+
+  <div class="dash-cards">
+    <a class="dash-card" href="{{ url_for('chat.room') }}"><i class="fa-solid fa-comments"></i><span>Chat</span></a>
+    <a class="dash-card" href="#players"><i class="fa-solid fa-users"></i><span>My Players</span></a>
+    <a class="dash-card" href="#links"><i class="fa-solid fa-link"></i><span>Game Links</span></a>
+    <a class="dash-card" href="#profile"><i class="fa-solid fa-id-card"></i><span>Profile</span></a>
+  </div>
+
+  {% if announcements %}
+  <div class="section-head"><h2><i class="fa-solid fa-bullhorn"></i> Announcements</h2></div>
+  <div class="announce-strip">{% for a in announcements %}<div class="announce-card {% if a.pinned %}pinned{% endif %}"><h4>{{ a.title }}</h4><p>{{ a.body }}</p></div>{% endfor %}</div>
+  {% endif %}
+
+  <div class="section-head" id="links"><h2><i class="fa-solid fa-link"></i> Share Game Links</h2></div>
+  <div class="card">
+    <table class="data-table">
+      <thead><tr><th>Game</th><th>User Link</th><th>Agent Link</th></tr></thead>
+      <tbody>
+        {% for g in games %}
+        <tr>
+          <td><strong>{{ g.name }}</strong></td>
+          <td>{% if g.user_link %}<button class="btn-ghost sm" onclick="copyLink('{{ g.user_link }}')"><i class="fa-solid fa-copy"></i> Copy</button>{% else %}<span class="muted">—</span>{% endif %}</td>
+          <td>{% if g.agent_link %}<button class="btn-ghost sm" onclick="copyLink('{{ g.agent_link }}')"><i class="fa-solid fa-copy"></i> Copy</button>{% else %}<span class="muted">—</span>{% endif %}</td>
+        </tr>
+        {% else %}<tr><td colspan="3" class="muted">No games.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section-head" id="players"><h2><i class="fa-solid fa-users"></i> Players</h2></div>
+  <div class="card">
+    <table class="data-table">
+      <thead><tr><th>Username</th><th>Name</th><th>Status</th><th>Last Login</th></tr></thead>
+      <tbody>
+        {% for p in players %}
+        <tr><td>{{ p.username }}</td><td>{{ p.full_name or '—' }}</td>
+          <td><span class="badge {{ 'ok' if p.is_active else 'off' }}">{{ 'active' if p.is_active else 'disabled' }}</span></td>
+          <td class="muted">{{ p.last_login or 'never' }}</td></tr>
+        {% else %}<tr><td colspan="4" class="muted">No players yet.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card" id="profile" style="max-width:480px">
+    <h3><i class="fa-solid fa-id-card"></i> My Profile</h3>
+    <form method="post" action="{{ url_for('agent.profile') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Full Name<input name="full_name" value="{{ current_user.full_name }}"></label>
+      <hr style="border-color:var(--line)">
+      <p class="muted small">Change password (optional)</p>
+      <label>Current Password<input type="password" name="current_password"></label>
+      <label>New Password<input type="password" name="new_password"></label>
+      <button class="btn-gold">Save Profile</button>
+    </form>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>function copyLink(t){navigator.clipboard.writeText(t).then(()=>alert('Link copied!'));}</script>
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "admin/base.html" %}
+{% set page_title = 'Users' %}
+{% block content %}
+<div class="toolbar"><button class="btn-gold" onclick="openUser()"><i class="fa-solid fa-user-plus"></i> Add User</button></div>
+
+<div class="card">
+  <table class="data-table">
+    <thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Status</th><th>Last Login</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td><strong>{{ u.username }}</strong></td>
+        <td>{{ u.full_name or '—' }}</td>
+        <td><span class="badge {{ 'gold' if u.role=='admin' else '' }}">{{ u.role }}</span></td>
+        <td><span class="badge {{ 'ok' if u.is_active else 'off' }}">{{ 'active' if u.is_active else 'disabled' }}</span></td>
+        <td class="muted">{{ u.last_login or 'never' }}</td>
+        <td class="row-actions">
+          <button class="icon-btn" data-u='{{ {"id":u.id,"username":u.username,"full_name":u.full_name,"role":u.role,"is_active":u.is_active}|tojson }}' onclick="editUser(this)"><i class="fa-solid fa-pen"></i></button>
+          {% if u.id != current_user.id %}
+          <form method="post" action="{{ url_for('admin.delete_user', uid=u.id) }}" class="inline" onsubmit="return confirm('Delete user?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="icon-btn danger"><i class="fa-solid fa-trash"></i></button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="modal" id="userModal"><div class="modal-card">
+  <div class="modal-head"><h3 id="userTitle">Add User</h3><button class="icon-btn" onclick="closeModal('userModal')">&times;</button></div>
+  <form method="post" action="{{ url_for('admin.save_user') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="id" id="u_id">
+    <label>Username<input type="text" name="username" id="u_username" required></label>
+    <label>Full Name<input type="text" name="full_name" id="u_full_name"></label>
+    <label>Password <small class="muted" id="pwHint">(min 6 chars)</small><input type="password" name="password" id="u_password"></label>
+    <div class="form-row">
+      <label>Role<select name="role" id="u_role"><option value="staff">Staff / User</option><option value="agent">Agent</option><option value="admin">Admin</option></select></label>
+      <label class="checkline"><input type="checkbox" name="is_active" id="u_is_active" checked> Active</label>
+    </div>
+    <div class="modal-foot"><button type="button" class="btn-ghost" onclick="closeModal('userModal')">Cancel</button><button class="btn-gold">Save</button></div>
+  </form>
+</div></div>
+{% endblock %}
+{% block scripts %}
+<script>
+function openUser(){ resetForm('userModal'); u_is_active.checked=true; u_role.value='staff';
+  document.getElementById('userTitle').textContent='Add User';
+  document.getElementById('pwHint').textContent='(required, min 6 chars)';
+  openModal('userModal'); }
+function editUser(btn){ const u=JSON.parse(btn.dataset.u);
+  document.getElementById('userTitle').textContent='Edit User';
+  document.getElementById('pwHint').textContent='(leave blank to keep current)';
+  u_id.value=u.id; u_username.value=u.username; u_full_name.value=u.full_name||'';
+  u_role.value=u.role; u_is_active.checked=!!u.is_active; u_password.value='';
+  openModal('userModal'); }
+</script>
+{% endblock %}

@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section class="hero">
+  <div class="hero-glow"></div>
+  <div class="wrap hero-inner">
+    <div class="hero-text">
+      <span class="pill"><i class="fa-solid fa-bolt"></i> Live Casino Platform</span>
+      <h1>{{ content.banner_title }}</h1>
+      <p>{{ content.banner_subtitle }}</p>
+      <div class="hero-cta">
+        <a class="btn-gold lg" href="{{ url_for('public.games') }}">{{ content.banner_cta or 'Explore Games' }} <i class="fa-solid fa-arrow-right"></i></a>
+        {% if not current_user %}<a class="btn-ghost lg" href="{{ url_for('auth.login') }}">Sign In</a>{% endif %}
+      </div>
+      <form class="hero-search" action="{{ url_for('public.games') }}" method="get">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input type="text" name="q" placeholder="Search games, categories, keywords...">
+        <button type="submit">Search</button>
+      </form>
+    </div>
+    <div class="hero-stats">
+      <div class="stat-card">
+        <span class="stat-label">Today's Profit</span>
+        <span class="stat-value">{{ currency }}{{ profit.today|money }}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Weekly Profit</span>
+        <span class="stat-value">{{ currency }}{{ profit.week|money }}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Monthly Profit</span>
+        <span class="stat-value">{{ currency }}{{ profit.month|money }}</span>
+      </div>
+      <div class="stat-card gold">
+        <span class="stat-label">Active Games</span>
+        <span class="stat-value">{{ stats.active }}</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% if winner %}
+<section class="wrap">
+  <div class="winner-banner">
+    <div class="winner-badge"><i class="fa-solid fa-crown"></i></div>
+    <div class="winner-photo">
+      {% if winner.photo %}<img src="{{ url_for('static', filename=winner.photo) }}" alt="{{ winner.name }}">{% else %}<span>🏆</span>{% endif %}
+    </div>
+    <div class="winner-info">
+      <span class="pill gold-pill">Daily Winner</span>
+      <h3>{{ winner.name }}</h3>
+      <p>won <strong>{{ currency }}{{ winner.amount|money }}</strong>{% if winner.game %} on <em>{{ winner.game }}</em>{% endif %} · {{ winner.win_date }}</p>
+    </div>
+    <a class="btn-ghost" href="{{ url_for('public.winners') }}">All Winners</a>
+  </div>
+</section>
+{% endif %}
+
+{% if announcements %}
+<section class="wrap section">
+  <div class="section-head"><h2><i class="fa-solid fa-bullhorn"></i> Latest Announcements</h2></div>
+  <div class="announce-strip">
+    {% for a in announcements %}
+    <div class="announce-card {% if a.pinned %}pinned{% endif %}">
+      {% if a.pinned %}<span class="pin"><i class="fa-solid fa-thumbtack"></i> Pinned</span>{% endif %}
+      <h4>{{ a.title }}</h4>
+      <p>{{ a.body }}</p>
+      <span class="muted small">{{ a.created_at[:10] }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="wrap section">
+  <div class="section-head"><h2><i class="fa-solid fa-layer-group"></i> Game Categories</h2></div>
+  <div class="cat-grid">
+    {% for c in categories %}
+    <a class="cat-card" href="{{ url_for('public.games', category=c.slug) }}">
+      <i class="fa-solid {{ c.icon }}"></i>
+      <span>{{ c.name }}</span>
+      <small>{{ c.game_count }} games</small>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+
+{% if featured %}
+<section class="wrap section">
+  <div class="section-head"><h2><i class="fa-solid fa-star"></i> Featured Games</h2>
+    <a href="{{ url_for('public.games') }}" class="see-all">See all <i class="fa-solid fa-chevron-right"></i></a></div>
+  <div class="game-grid">
+    {% for g in featured %}{% include "_game_card.html" %}{% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if new_games %}
+<section class="wrap section">
+  <div class="section-head"><h2><i class="fa-solid fa-certificate"></i> New Games</h2></div>
+  <div class="game-grid">{% for g in new_games %}{% include "_game_card.html" %}{% endfor %}</div>
+</section>
+{% endif %}
+
+{% if popular %}
+<section class="wrap section">
+  <div class="section-head"><h2><i class="fa-solid fa-fire"></i> Popular Games</h2></div>
+  <div class="game-grid">{% for g in popular %}{% include "_game_card.html" %}{% endfor %}</div>
+</section>
+{% endif %}
+
+<section class="wrap section">
+  <div class="section-head"><h2><i class="fa-solid fa-dice"></i> All Games</h2>
+    <a href="{{ url_for('public.games') }}" class="see-all">See all <i class="fa-solid fa-chevron-right"></i></a></div>
+  <div class="game-grid">
+    {% for g in games %}{% include "_game_card.html" %}{% else %}
+      <p class="muted">No games yet. Admins can add games from the dashboard.</p>
+    {% endfor %}
+  </div>
+</section>
+
+{% if agents %}
+<section class="wrap section">
+  <div class="section-head"><h2><i class="fa-solid fa-user-tie"></i> Agent Directory</h2></div>
+  <div class="agent-grid">
+    {% for a in agents %}
+    <div class="agent-card"><i class="fa-solid fa-circle-user"></i><span>{{ a.full_name or a.username }}</span>
+      <a class="btn-ghost sm" href="{{ url_for('public.business') }}">Contact</a></div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="wrap section">
+  <div class="cta-band">
+    <div>
+      <h2>{{ settings.business_name }}</h2>
+      <p class="muted">Questions about games, links, or agents? Our team is here 24/7.</p>
+    </div>
+    <a class="btn-gold lg" href="{{ url_for('public.business') }}"><i class="fa-solid fa-headset"></i> Business Contact</a>
+  </div>
+</section>
+
+{% if current_user %}
+<a class="chat-fab" href="{{ url_for('chat.room') }}" title="Open chat"><i class="fa-solid fa-comments"></i></a>
+{% endif %}
+{% endblock %}

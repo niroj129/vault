@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="wrap section">
+  <div class="chat-layout">
+    <aside class="chat-side">
+      <h3><i class="fa-solid fa-circle" style="color:#3ddc84;font-size:.6em"></i> Online</h3>
+      <ul id="onlineList" class="online-list"></ul>
+    </aside>
+
+    <div class="chat-main card">
+      <div class="chat-header">
+        <h3><i class="fa-solid fa-comments"></i> Community Chat</h3>
+        <div class="chat-search">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input id="chatSearch" type="text" placeholder="Search messages...">
+        </div>
+      </div>
+
+      <div id="messages" class="messages"></div>
+
+      <form id="chatForm" class="chat-input" autocomplete="off">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="button" class="emoji-btn" id="emojiBtn">😊</button>
+        <div id="emojiPanel" class="emoji-panel"></div>
+        <label class="attach-btn" title="Attach image">
+          <i class="fa-solid fa-paperclip"></i>
+          <input type="file" id="chatImage" name="image" accept="image/*" hidden>
+        </label>
+        <input id="chatText" name="body" type="text" placeholder="Type a message…" maxlength="2000">
+        <button type="submit" class="btn-gold"><i class="fa-solid fa-paper-plane"></i></button>
+      </form>
+      <div id="attachName" class="attach-name"></div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  window.CHAT = {
+    pollUrl: "{{ url_for('chat.poll') }}",
+    historyUrl: "{{ url_for('chat.history') }}",
+    sendUrl: "{{ url_for('chat.send') }}",
+    csrf: "{{ csrf_token() }}"
+  };
+</script>
+<script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+{% endblock %}

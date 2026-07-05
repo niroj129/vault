@@ -1,0 +1,55 @@
+{% extends "admin/base.html" %}
+{% set page_title = 'Announcements' %}
+{% block content %}
+<div class="toolbar"><button class="btn-gold" onclick="openAnn()"><i class="fa-solid fa-plus"></i> New Announcement</button></div>
+
+<div class="card">
+  <table class="data-table">
+    <thead><tr><th>Title</th><th>Status</th><th>Pinned</th><th>Publish</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for a in announcements %}
+      <tr>
+        <td><strong>{{ a.title }}</strong><br><small class="muted">{{ a.body[:60] }}</small></td>
+        <td><span class="badge {{ 'ok' if a.active else 'off' }}">{{ 'active' if a.active else 'hidden' }}</span></td>
+        <td>{% if a.pinned %}<i class="fa-solid fa-thumbtack gold-text"></i>{% else %}—{% endif %}</td>
+        <td class="muted">{{ a.publish_at or 'immediate' }}</td>
+        <td class="row-actions">
+          <button class="icon-btn" data-a='{{ {"id":a.id,"title":a.title,"body":a.body,"pinned":a.pinned,"active":a.active,"publish_at":a.publish_at}|tojson }}' onclick="editAnn(this)"><i class="fa-solid fa-pen"></i></button>
+          <form method="post" action="{{ url_for('admin.delete_announcement', aid=a.id) }}" class="inline" onsubmit="return confirm('Delete?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="icon-btn danger"><i class="fa-solid fa-trash"></i></button>
+          </form>
+        </td>
+      </tr>
+      {% else %}<tr><td colspan="5" class="muted">No announcements.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="modal" id="annModal"><div class="modal-card">
+  <div class="modal-head"><h3 id="annTitle">New Announcement</h3><button class="icon-btn" onclick="closeModal('annModal')">&times;</button></div>
+  <form method="post" action="{{ url_for('admin.save_announcement') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="id" id="a_id">
+    <label>Title<input type="text" name="title" id="a_title" required></label>
+    <label>Message<textarea name="body" id="a_body" rows="4"></textarea></label>
+    <label>Schedule (optional, leave blank for immediate)<input type="datetime-local" name="publish_at" id="a_publish_at"></label>
+    <div class="form-row">
+      <label class="checkline"><input type="checkbox" name="pinned" id="a_pinned"> Pin to top</label>
+      <label class="checkline"><input type="checkbox" name="active" id="a_active" checked> Active</label>
+    </div>
+    <div class="modal-foot"><button type="button" class="btn-ghost" onclick="closeModal('annModal')">Cancel</button><button class="btn-gold">Save</button></div>
+  </form>
+</div></div>
+{% endblock %}
+{% block scripts %}
+<script>
+function openAnn(){ resetForm('annModal'); a_active.checked=true;
+  document.getElementById('annTitle').textContent='New Announcement'; openModal('annModal'); }
+function editAnn(btn){ const a=JSON.parse(btn.dataset.a);
+  document.getElementById('annTitle').textContent='Edit Announcement';
+  a_id.value=a.id; a_title.value=a.title; a_body.value=a.body||'';
+  a_publish_at.value=(a.publish_at||'').replace(' ','T'); a_pinned.checked=!!a.pinned; a_active.checked=!!a.active;
+  openModal('annModal'); }
+</script>
+{% endblock %}

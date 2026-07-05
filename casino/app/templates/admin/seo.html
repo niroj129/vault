@@ -1,0 +1,33 @@
+{% extends "admin/base.html" %}
+{% set page_title = 'SEO Management' %}
+{% block content %}
+<div class="card">
+  <h3><i class="fa-solid fa-plus"></i> Add / Update Page SEO</h3>
+  <form method="post" action="{{ url_for('admin.save_seo') }}" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-row">
+      <label>Page key<input name="page" placeholder="home / games / winners / custom" required></label>
+      <label>Robots<input name="robots" value="index, follow"></label>
+    </div>
+    <label>Meta Title<input name="title"></label>
+    <label>Meta Description<textarea name="description" rows="2"></textarea></label>
+    <label>Keywords<input name="keywords"></label>
+    <label>Canonical URL<input name="canonical" type="url" placeholder="https://..."></label>
+    <label>Open Graph / Social Image<input type="file" name="og_image_file" accept="image/*"></label>
+    <button class="btn-gold">Save SEO</button>
+  </form>
+  <p class="muted small">Sitemap: <a href="{{ url_for('public.sitemap') }}" target="_blank">/sitemap.xml</a> · Robots: <a href="{{ url_for('public.robots') }}" target="_blank">/robots.txt</a> · Structured data & OG/Twitter tags are injected automatically.</p>
+</div>
+
+<div class="card">
+  <h3><i class="fa-solid fa-list"></i> Configured Pages</h3>
+  <table class="data-table">
+    <thead><tr><th>Page</th><th>Title</th><th>Description</th><th>Robots</th></tr></thead>
+    <tbody>
+      {% for p in pages %}
+      <tr><td><strong>{{ p.page }}</strong></td><td>{{ p.title }}</td><td class="muted">{{ p.description[:70] }}</td><td>{{ p.robots }}</td></tr>
+      {% else %}<tr><td colspan="4" class="muted">No SEO records.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

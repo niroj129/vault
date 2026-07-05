@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block body_class %}auth-body{% endblock %}
+{% block chrome %}{% endblock %}
+{% block footer %}{% endblock %}
+{% block content %}
+<div class="auth-shell">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <span class="brand-mark">🎰</span>
+      <h1>{{ settings.site_name }}</h1>
+      <p>{{ settings.tagline }}</p>
+    </div>
+    <form method="post" action="{{ url_for('auth.login') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Username
+        <div class="input-icon"><i class="fa-solid fa-user"></i>
+          <input type="text" name="username" required autofocus autocomplete="username"></div>
+      </label>
+      <label>Password
+        <div class="input-icon"><i class="fa-solid fa-lock"></i>
+          <input type="password" name="password" required autocomplete="current-password"></div>
+      </label>
+      <label class="remember"><input type="checkbox" name="remember"> Remember me</label>
+      <button class="btn-gold lg full" type="submit">Sign In <i class="fa-solid fa-arrow-right"></i></button>
+    </form>
+    <p class="auth-foot muted small">Accounts are created by administrators. No public sign-up.</p>
+    <a class="muted small" href="{{ url_for('public.home') }}"><i class="fa-solid fa-arrow-left"></i> Back to site</a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,56 @@
+{% extends "admin/base.html" %}
+{% set page_title = 'Daily Winners' %}
+{% block content %}
+<div class="toolbar"><button class="btn-gold" onclick="openWinner()"><i class="fa-solid fa-plus"></i> Add Winner</button></div>
+
+<div class="card">
+  <h3><i class="fa-solid fa-clock-rotate-left"></i> Winner History</h3>
+  <table class="data-table">
+    <thead><tr><th>Photo</th><th>Name</th><th>Amount</th><th>Game</th><th>Date</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for w in winners %}
+      <tr>
+        <td>{% if w.photo %}<img class="row-thumb round" src="{{ url_for('static', filename=w.photo) }}">{% else %}🏆{% endif %}</td>
+        <td><strong>{{ w.name }}</strong></td>
+        <td class="gold-text">{{ currency }}{{ w.amount|money }}</td>
+        <td>{{ w.game or '—' }}</td>
+        <td class="muted">{{ w.win_date }}</td>
+        <td class="row-actions">
+          <button class="icon-btn" data-w='{{ {"id":w.id,"name":w.name,"amount":w.amount,"game":w.game,"win_date":w.win_date}|tojson }}' onclick="editWinner(this)"><i class="fa-solid fa-pen"></i></button>
+          <form method="post" action="{{ url_for('admin.delete_winner', wid=w.id) }}" class="inline" onsubmit="return confirm('Delete winner?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="icon-btn danger"><i class="fa-solid fa-trash"></i></button>
+          </form>
+        </td>
+      </tr>
+      {% else %}<tr><td colspan="6" class="muted">No winners recorded.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="modal" id="winModal"><div class="modal-card">
+  <div class="modal-head"><h3 id="winTitle">Add Winner</h3><button class="icon-btn" onclick="closeModal('winModal')">&times;</button></div>
+  <form method="post" action="{{ url_for('admin.save_winner') }}" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="id" id="w_id">
+    <label>Winner Name<input type="text" name="name" id="w_name" required></label>
+    <div class="form-row">
+      <label>Winning Amount<input type="number" step="0.01" name="amount" id="w_amount" required></label>
+      <label>Winning Date<input type="date" name="win_date" id="w_win_date" value="{{ today }}"></label>
+    </div>
+    <label>Winning Game<input type="text" name="game" id="w_game"></label>
+    <label>Winner Photo (optional)<input type="file" name="photo" accept="image/*"></label>
+    <div class="modal-foot"><button type="button" class="btn-ghost" onclick="closeModal('winModal')">Cancel</button><button class="btn-gold">Save</button></div>
+  </form>
+</div></div>
+{% endblock %}
+{% block scripts %}
+<script>
+function openWinner(){ resetForm('winModal'); w_win_date.value='{{ today }}';
+  document.getElementById('winTitle').textContent='Add Winner'; openModal('winModal'); }
+function editWinner(btn){ const w=JSON.parse(btn.dataset.w);
+  document.getElementById('winTitle').textContent='Edit Winner';
+  w_id.value=w.id; w_name.value=w.name; w_amount.value=w.amount; w_game.value=w.game||''; w_win_date.value=w.win_date;
+  openModal('winModal'); }
+</script>
+{% endblock %}

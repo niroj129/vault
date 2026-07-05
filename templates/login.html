@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block body %}
+<div style="max-width: 380px; margin: 3rem auto;">
+  <h1 style="text-align:center;">🎮 Game Points</h1>
+  <p class="sub" style="text-align:center;">Log in to your brand</p>
+  <form method="post" class="card">
+    <label for="username">Username</label>
+    <input id="username" name="username" autofocus required style="width:100%; margin-bottom:.4rem;">
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" required style="width:100%; margin-bottom:1rem;">
+    <button type="submit" style="width:100%;">Log in</button>
+  </form>
+</div>
+{% endblock %}

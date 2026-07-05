@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>{{ user['brand'] or user['username'] }} — Game Points</h1>
+<p class="sub">
+  Auto-alert when a game's <b>combined</b> (Sub-Dist + Vendor) drops below
+  <b>{{ threshold }}</b>. You can also send a load reminder anytime with your own amount.
+  {% if not user['group_chat_id'] %}
+  <br><b style="color:#dc2626;">⚠️ No Telegram group set —
+  <a href="{{ url_for('settings') }}">add it on Settings</a>.</b>
+  {% endif %}
+</p>
+
+<div class="card">
+  <h3 style="margin-top:0;">➕ Add a game</h3>
+  <form method="post" action="{{ url_for('add_game') }}"
+        style="display:flex; gap:.75rem; flex-wrap:wrap; align-items:flex-end;">
+    <div>
+      <label>Game name</label>
+      <input name="name" placeholder="e.g. Dragon" required>
+    </div>
+    <div>
+      <label>Sub-Dist points</label>
+      <input name="sub_points" type="number" step="any" value="0" style="width:120px;">
+    </div>
+    <div>
+      <label>Vendor points</label>
+      <input name="vendor_points" type="number" step="any" value="0" style="width:120px;">
+    </div>
+    <button type="submit">Add game</button>
+  </form>
+</div>
+
+<div class="card" style="padding:0; overflow:hidden;">
+  <table>
+    <thead>
+      <tr>
+        <th>Game</th>
+        <th>Sub-Dist</th>
+        <th>Vendor</th>
+        <th>Combined</th>
+        <th>Update</th>
+        <th>Send reminder</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for g in games %}
+      {% set combined = g['sub_points'] + g['vendor_points'] %}
+      <tr>
+        <td><b>{{ g['name'] }}</b></td>
+        <td colspan="2">
+          <form method="post" action="{{ url_for('update_game', game_id=g['id']) }}"
+                id="upd-{{ g['id'] }}" class="inline">
+            <input name="sub_points" type="number" step="any"
+                   value="{{ '%g' % g['sub_points'] }}" style="width:85px;">
+            <input name="vendor_points" type="number" step="any"
+                   value="{{ '%g' % g['vendor_points'] }}" style="width:85px;">
+          </form>
+        </td>
+        <td><span class="pill {{ 'low' if combined < threshold else 'ok' }}">{{ '%g' % combined }}</span></td>
+        <td><button class="ghost" type="submit" form="upd-{{ g['id'] }}">Save</button></td>
+        <td>
+          <form method="post" action="{{ url_for('remind', game_id=g['id']) }}" class="inline">
+            <input name="load_points" type="number" step="any" value="500"
+                   title="How many points to load" style="width:80px;">
+            <button class="warn" type="submit" title="Send this load reminder to your group now">🔔 Remind</button>
+          </form>
+        </td>
+        <td>
+          <form method="post" action="{{ url_for('delete_game', game_id=g['id']) }}"
+                onsubmit="return confirm('Remove {{ g['name'] }}?');">
+            <button class="danger" type="submit" title="Delete">✕</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" style="color:#64748b;">No games yet — add one above.</td></tr>
+      {% endfor %}
+    </tbody>
+    {% if games %}
+    <tfoot>
+      <tr>
+        <th>Total (all games)</th>
+        <th colspan="2"></th>
+        <th><span class="pill {{ 'low' if total < threshold else 'ok' }}">{{ '%g' % total }}</span></th>
+        <th colspan="3"></th>
+      </tr>
+    </tfoot>
+    {% endif %}
+  </table>
+</div>
+{% endblock %}

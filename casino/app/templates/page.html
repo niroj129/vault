@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block head %}<title>{{ title }} — {{ settings.site_name }}</title>{% endblock %}
+{% block content %}
+<section class="wrap section narrow">
+  <div class="page-head"><h1>{{ title }}</h1></div>
+  <article class="prose">{{ content[body_key]|replace('\n', '<br>')|safe }}</article>
+  {% if body_key == 'contact' %}
+  <div class="contact-cards">
+    <div class="contact-card"><i class="fa-solid fa-envelope"></i><span>{{ settings.contact_email }}</span></div>
+    <div class="contact-card"><i class="fa-solid fa-phone"></i><span>{{ settings.contact_phone }}</span></div>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Settings — {{ user['brand'] or user['username'] }}</h1>
+<form method="post" class="card" style="max-width: 460px;">
+  <label>Brand</label>
+  <input value="{{ user['brand'] or user['username'] }}" disabled
+         style="width:100%; background:#f3f4f6;">
+
+  <label for="group_chat_id">Telegram group chat ID</label>
+  <input id="group_chat_id" name="group_chat_id" value="{{ user['group_chat_id'] }}"
+         placeholder="-1001234567890" style="width:100%;">
+  <small>Your alerts go to this group. It usually starts with <b>-100…</b>.
+     See the setup guide if you don't have it yet.</small>
+
+  <p style="margin-top:1rem;"><button type="submit">Save</button></p>
+</form>
+{% endblock %}

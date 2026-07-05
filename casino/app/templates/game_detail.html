@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block head %}
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[
+ {"@type":"ListItem","position":1,"name":"Home","item":"{{ url_for('public.home', _external=True) }}"},
+ {"@type":"ListItem","position":2,"name":"Games","item":"{{ url_for('public.games', _external=True) }}"},
+ {"@type":"ListItem","position":3,"name":"{{ game.name }}","item":"{{ url_for('public.game_landing', slug=game.slug, _external=True) }}"}]}
+</script>
+{% if faqs %}
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
+{% for f in faqs %}{"@type":"Question","name":{{ f.q|tojson }},"acceptedAnswer":{"@type":"Answer","text":{{ f.a|tojson }}}}{{ "," if not loop.last }}{% endfor %}]}
+</script>
+{% endif %}
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"VideoGame","name":"{{ game.name }}",
+ "description":{{ (game.meta_description or game.description)|tojson }},
+ {% if game.category %}"genre":"{{ game.category }}",{% endif %}
+ "applicationCategory":"Game","operatingSystem":"Android, iOS, Web"}
+</script>
+{% endblock %}
+{% block content %}
+<nav class="breadcrumb wrap">
+  <a href="{{ url_for('public.home') }}">Home</a> ›
+  <a href="{{ url_for('public.games') }}">Games</a> ›
+  <span>{{ game.name }}</span>
+</nav>
+
+<section class="wrap section">
+  {% if game.banner %}<div class="game-banner"><img src="{{ url_for('static', filename=game.banner) }}" alt="{{ game.name }} banner"></div>{% endif %}
+
+  <div class="detail-grid">
+    <div class="detail-media">
+      {% if game.logo %}<img src="{{ url_for('static', filename=game.logo) }}" alt="{{ game.name }} logo">
+      {% elif game.image %}<img src="{{ url_for('static', filename=game.image) }}" alt="{{ game.name }}">
+      {% else %}<div class="thumb-placeholder big"><i class="fa-solid fa-dice-d20"></i></div>{% endif %}
+    </div>
+    <div class="detail-info">
+      <div class="badge-row">
+        {% if game.category %}<a class="tag" href="{{ url_for('public.games', category=game.cat_slug) }}">{{ game.category }}</a>{% endif %}
+        {% if game.is_new %}<span class="tag new">New</span>{% endif %}
+        <span class="live-badge {{ 'on' if game.status=='active' else 'off' }}">{{ 'Live' if game.status=='active' else 'Offline' }}</span>
+      </div>
+      <h1>{{ game.name }}</h1>
+      <p class="detail-desc">{{ game.description }}</p>
+
+      <div class="link-buttons">
+        {% if current_user %}
+          {% if game.user_link or game.play_url %}
+          <a class="btn-gold lg" href="{{ url_for('public.play', game_id=game.id) }}" target="_blank" rel="noopener"><i class="fa-solid fa-user"></i> User Login Link</a>
+          {% endif %}
+          {% if game.agent_link and current_user.role in ['admin','agent'] %}
+          <a class="btn-ghost lg" href="{{ game.agent_link }}" target="_blank" rel="noopener"><i class="fa-solid fa-user-tie"></i> Agent Link</a>
+          {% endif %}
+        {% else %}
+          <a class="btn-gold lg" href="{{ url_for('auth.login') }}"><i class="fa-solid fa-lock"></i> Sign in for Links</a>
+        {% endif %}
+        <a class="btn-ghost lg" href="{{ url_for('public.business') }}"><i class="fa-solid fa-headset"></i> Contact Agent</a>
+      </div>
+      <p class="muted small"><i class="fa-solid fa-fire"></i> {{ game.clicks }} plays · <i class="fa-solid fa-eye"></i> {{ game.views }} views</p>
+    </div>
+  </div>
+
+  <div class="detail-cols">
+    <div class="detail-body">
+      {% if features %}
+      <div class="card">
+        <h3><i class="fa-solid fa-list-check"></i> Features</h3>
+        <ul class="feature-list">{% for f in features %}<li><i class="fa-solid fa-check"></i> {{ f }}</li>{% endfor %}</ul>
+      </div>
+      {% endif %}
+
+      {% if game.download_info %}
+      <div class="card"><h3><i class="fa-solid fa-download"></i> Download / Access</h3>
+        <p>{{ game.download_info }}</p></div>
+      {% endif %}
+
+      {% if screenshots %}
+      <div class="card"><h3><i class="fa-solid fa-images"></i> Screenshots</h3>
+        <div class="shot-grid">{% for s in screenshots %}<img loading="lazy" src="{{ url_for('static', filename=s) }}" alt="{{ game.name }} screenshot">{% endfor %}</div>
+      </div>
+      {% endif %}
+
+      {% if faqs %}
+      <div class="card"><h3><i class="fa-solid fa-circle-question"></i> Frequently Asked Questions</h3>
+        <div class="faq-list">
+          {% for f in faqs %}
+          <details class="faq"><summary>{{ f.q }}</summary><p>{{ f.a }}</p></details>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <aside class="detail-aside">
+      <div class="card contact-agent-card">
+        <h3><i class="fa-solid fa-user-tie"></i> Need an Agent?</h3>
+        <p class="muted small">Contact a verified agent to load your account.</p>
+        {% for a in agents %}<div class="agent-row"><i class="fa-solid fa-circle-user"></i> {{ a.full_name or a.username }}</div>{% endfor %}
+        <a class="btn-gold full" href="{{ url_for('public.business') }}">Contact Us</a>
+      </div>
+    </aside>
+  </div>
+
+  {% if related %}
+  <div class="section-head"><h2>Related Games</h2></div>
+  <div class="game-grid">{% for g in related %}{% include "_game_card.html" %}{% endfor %}</div>
+  {% endif %}
+</section>
+{% endblock %}

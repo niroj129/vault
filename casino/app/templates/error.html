@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="wrap section">
+  <div class="empty big">
+    <div class="err-code">{{ code }}</div>
+    <p>{{ msg }}</p>
+    <a class="btn-gold" href="{{ url_for('public.home') }}"><i class="fa-solid fa-house"></i> Back home</a>
+  </div>
+</section>
+{% endblock %}

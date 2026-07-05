@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="wrap section">
+  <div class="page-head">
+    <h1><i class="fa-solid fa-dice"></i> All Games</h1>
+    <form class="inline-search" action="{{ url_for('public.games') }}" method="get">
+      {% if active_cat %}<input type="hidden" name="category" value="{{ active_cat }}">{% endif %}
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input type="text" name="q" value="{{ q }}" placeholder="Search games...">
+      <button type="submit">Search</button>
+    </form>
+  </div>
+
+  <div class="filter-bar">
+    <a class="chip {{ 'active' if not active_cat }}" href="{{ url_for('public.games', q=q) }}">All</a>
+    {% for c in categories %}
+      <a class="chip {{ 'active' if active_cat == c.slug }}" href="{{ url_for('public.games', category=c.slug, q=q) }}">
+        <i class="fa-solid {{ c.icon }}"></i> {{ c.name }}</a>
+    {% endfor %}
+  </div>
+
+  {% if q %}<p class="muted">Results for “{{ q }}” — {{ games|length }} found.</p>{% endif %}
+
+  <div class="game-grid">
+    {% for g in games %}{% include "_game_card.html" %}{% else %}
+      <div class="empty"><i class="fa-solid fa-ghost"></i><p>No games match your search.</p></div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
