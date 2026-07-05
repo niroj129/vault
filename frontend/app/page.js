@@ -25,7 +25,6 @@ export default async function Home() {
       getJSONSafe("/stats/public/", { profit: {}, active_games: 0 }),
     ]);
   const winner = stats.latest_winner;
-  const p = stats.profit || {};
 
   return (
     <>
@@ -55,10 +54,10 @@ export default async function Home() {
             </form>
           </div>
           <div className="hero-stats">
-            <div className="stat"><span className="label">Today's Profit</span><span className="value">${fmt(p.today)}</span></div>
-            <div className="stat"><span className="label">Weekly Profit</span><span className="value">${fmt(p.week)}</span></div>
-            <div className="stat"><span className="label">Monthly Profit</span><span className="value">${fmt(p.month)}</span></div>
-            <div className="stat violet"><span className="label">Active Games</span><span className="value">{stats.active_games}</span></div>
+            <div className="stat violet"><span className="label">Available Games</span><span className="value">{stats.active_games}</span></div>
+            <div className="stat"><span className="label">Categories</span><span className="value">{stats.categories}</span></div>
+            <div className="stat"><span className="label">Live Support</span><span className="value">24/7</span></div>
+            <div className="stat"><span className="label">Verified & Safe</span><span className="value">100%</span></div>
           </div>
         </div>
       </section>

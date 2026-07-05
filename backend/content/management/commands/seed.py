@@ -255,14 +255,6 @@ class Command(BaseCommand):
                     game=random.choice([g[0] for g in GAMES]),
                     win_date=date.today() - timedelta(days=k))
 
-        # --- profit (last 30 days) ---
-        if not DailyProfit.objects.exists():
-            for k in range(30):
-                DailyProfit.objects.create(
-                    date=date.today() - timedelta(days=k),
-                    amount=random.randint(800, 5000),
-                    notes="")
-
         # --- announcements ---
         if not Announcement.objects.exists():
             Announcement.objects.create(
