@@ -31,15 +31,23 @@ PALETTE = [((139, 92, 246), (46, 16, 101)), ((14, 165, 233), (8, 47, 73)),
 
 
 def _font(size, bold=True):
-    names = (["Arial Bold.ttf", "Helvetica.ttc", "Arial.ttf"] if bold
-             else ["Arial.ttf", "Helvetica.ttc"])
-    for base in ("/System/Library/Fonts/Supplemental/", "/System/Library/Fonts/",
-                 "/Library/Fonts/"):
-        for n in names:
-            try:
-                return ImageFont.truetype(base + n, size)
-            except OSError:
-                continue
+    candidates = []
+    if bold:
+        candidates += [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",   # Linux
+            "/System/Library/Fonts/Supplemental/Arial Bold.ttf",       # macOS
+        ]
+    candidates += [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/System/Library/Fonts/Helvetica.ttc",
+        "/Library/Fonts/Arial.ttf",
+    ]
+    for path in candidates:
+        try:
+            return ImageFont.truetype(path, size)
+        except OSError:
+            continue
     return ImageFont.load_default()
 
 

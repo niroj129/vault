@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     "catalog",
     "content",
     "chat",
+    "payments",
 ]
 
 MIDDLEWARE = [

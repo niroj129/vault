@@ -15,6 +15,8 @@ const NAV = [
   ["/admin/winners", "🏆", "Daily Winners"],
   ["/admin/points", "📡", "Points & Telegram"],
   ["/admin/payments", "💳", "Payments & Cashout"],
+  ["/admin/merchants", "🏪", "Merchants"],
+  ["/admin/payorders", "🧾", "Payment Orders"],
   ["/admin/wallets", "👛", "Player Wallets"],
   ["/admin/settlement", "📒", "Settlement"],
   ["/admin/chat", "💬", "Chat", "unread_chats"],

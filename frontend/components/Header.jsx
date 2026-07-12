@@ -66,6 +66,8 @@ export default function Header() {
               <Link href="/chat">Chat</Link>
               {user.role === "admin" ? (
                 <Link href="/admin">Admin</Link>
+              ) : user.role === "merchant" ? (
+                <Link href="/merchant">Merchant</Link>
               ) : (
                 <Link href="/dashboard">My Area</Link>
               )}

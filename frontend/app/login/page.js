@@ -17,7 +17,8 @@ export default function LoginPage() {
     const f = new FormData(e.target);
     try {
       const user = await login(f.get("username"), f.get("password"));
-      router.push(user.role === "admin" ? "/admin" : "/dashboard");
+      router.push(user.role === "admin" ? "/admin"
+        : user.role === "merchant" ? "/merchant" : "/dashboard");
     } catch {
       setErr("Incorrect username or password.");
     } finally {

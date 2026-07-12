@@ -43,8 +43,8 @@ export default function ChatWidget() {
 
   // Hide on admin console and on the full chat page.
   if (!ready) return null;
-  if (pathname?.startsWith("/admin")) return null;
-  if (user?.role === "admin") return null;
+  if (pathname?.startsWith("/admin") || pathname?.startsWith("/merchant")) return null;
+  if (user?.role === "admin" || user?.role === "merchant") return null;
 
   async function send(e) {
     e.preventDefault();

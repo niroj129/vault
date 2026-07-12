@@ -10,6 +10,7 @@ from catalog.views import (CategoryViewSet, FavoriteViewSet, GameViewSet,
                            ReviewViewSet)
 from chat.views import ConversationView, InboxView, SendView
 from content import game_views
+from payments import views as pay_views
 from content.views import (AnnouncementViewSet, BusinessInfoView,
                            CashoutViewSet, ContactMessageViewSet,
                            DailyProfitViewSet, NotificationViewSet,
@@ -37,6 +38,9 @@ router.register("promos", PromoViewSet, basename="promo")
 router.register("faqs", SiteFAQViewSet, basename="faq")
 router.register("notifications", NotificationViewSet, basename="notification")
 router.register("users", AdminUserViewSet, basename="user")
+router.register("merchants", pay_views.MerchantViewSet, basename="merchant")
+router.register("pay-orders", pay_views.PayOrderViewSet, basename="payorder")
+router.register("transfer-orders", pay_views.TransferOrderViewSet, basename="transferorder")
 
 api = [
     # auth
@@ -73,6 +77,14 @@ api = [
     path("gameapi/reset-password/", game_views.reset_password),
     path("gameapi/player-offline/", game_views.player_offline),
     path("reports/shift/", game_views.shift_report),
+    # payment gateway
+    path("pay/create/", pay_views.create_pay_link),
+    path("pay/query/", pay_views.query_order),
+    path("pay/close/", pay_views.close_order),
+    path("pay/webhook/", pay_views.pay_webhook),
+    path("pay/stats/", pay_views.pay_stats),
+    path("transfer/create/", pay_views.create_transfer),
+    path("transfer/webhook/", pay_views.transfer_webhook),
     # chat
     path("chat/conversation/", ConversationView.as_view()),
     path("chat/send/", SendView.as_view()),

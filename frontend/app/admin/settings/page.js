@@ -69,6 +69,15 @@ export default function AdminSettings() {
         { name: "game_api_secret", label: "Game API Secret Key" },
         { name: "game_api_use_doh", label: "Use Secure DNS (bypass ISP block)", type: "checkbox" },
         { name: "game_api_force_ip", label: "Pin API to IP (optional)" },
+        { name: "pay_api_url", label: "Payment Gateway URL", full: true, help: "e.g. https://gateway.host" },
+        { name: "pay_mch_no", label: "Gateway Merchant No" },
+        { name: "pay_api_key", label: "Gateway API Key" },
+        { name: "pay_sign_type", label: "Sign Type (MD5/SHA256)" },
+        { name: "pay_currency", label: "Currency (e.g. usd)" },
+        { name: "pay_enabled_waycodes", label: "Enabled Pay Methods (comma)", full: true },
+        { name: "pay_transfer_waycodes", label: "Enabled Payout Methods (comma)", full: true },
+        { name: "pay_min_amount", label: "Min Amount (cents, 0=none)" },
+        { name: "pay_max_amount", label: "Max Amount (cents, 0=none)" },
         { name: "maintenance_mode", label: "Maintenance Mode", type: "checkbox" },
       ]} />
 

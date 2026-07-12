@@ -58,7 +58,7 @@ export default function AdminOverview() {
 
       <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(160px,1fr))", marginTop: "1.4rem" }}>
         {[["/admin/gameplatform", "🎯", "Game Platform"], ["/admin/transactions", "📆", "Transactions"],
-          ["/admin/points", "📡", "Points & Telegram"], ["/admin/payments", "💳", "Payments"],
+          ["/admin/merchants", "🏪", "Merchants"], ["/admin/payorders", "🧾", "Payment Orders"],
           ["/admin/chat", "💬", "Chat"], ["/admin/settlement", "📒", "Settlement"]].map(([h, i, l]) => (
           <Link key={h} href={h} className="tile"><span className="emoji">{i}</span><b>{l}</b></Link>
         ))}

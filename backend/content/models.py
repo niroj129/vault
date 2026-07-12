@@ -97,6 +97,19 @@ class SiteSettings(SingletonModel):
         "bypass ISP DNS blocking")
     game_api_force_ip = models.GenericIPAddressField(
         null=True, blank=True, help_text="Optional: pin the API host to this IP")
+    # Payment gateway (shared merchant credentials)
+    pay_api_url = models.CharField(max_length=200, blank=True,
+                                   help_text="Gateway base URL, e.g. https://host")
+    pay_mch_no = models.CharField(max_length=40, blank=True)
+    pay_api_key = models.CharField(max_length=120, blank=True)
+    pay_sign_type = models.CharField(max_length=10, default="MD5")
+    pay_currency = models.CharField(max_length=8, default="usd")
+    pay_enabled_waycodes = models.CharField(
+        max_length=200, default="cashapp,zelle,paypal,card,chime")
+    pay_transfer_waycodes = models.CharField(
+        max_length=200, default="ecashapp,paypal,venmo,zelle,chime,card,ach")
+    pay_min_amount = models.PositiveIntegerField(default=0, help_text="Cents, 0=none")
+    pay_max_amount = models.PositiveIntegerField(default=0, help_text="Cents, 0=none")
 
     def __str__(self):
         return "Site Settings"
