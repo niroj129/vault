@@ -1,4 +1,4 @@
-import { Poppins, Space_Grotesk } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "../lib/auth";
 import Header from "../components/Header";
@@ -9,13 +9,10 @@ import AnnouncementBar from "../components/AnnouncementBar";
 import JsonLd from "../components/JsonLd";
 import { getJSONSafe, SITE_URL } from "../lib/api";
 
-const body = Poppins({
+// Inter — neutral geometric sans (Stake-style). Used for both body and display.
+const inter = Inter({
   subsets: ["latin"], weight: ["400", "500", "600", "700", "800"],
   variable: "--font-body", display: "swap",
-});
-const display = Space_Grotesk({
-  subsets: ["latin"], weight: ["600", "700"], variable: "--font-display",
-  display: "swap",
 });
 
 export const metadata = {
@@ -54,7 +51,7 @@ export default async function RootLayout({ children }) {
     getJSONSafe("/settings/", {}),
   ]);
   return (
-    <html lang="en" className={`${body.variable} ${display.variable}`}>
+    <html lang="en" className={inter.variable}>
       <body>
         <JsonLd data={{
           "@context": "https://schema.org", "@type": "WebSite",

@@ -52,8 +52,8 @@ export default async function GamesPage({ searchParams }) {
 function pill(active) {
   return {
     padding: ".5em 1em", borderRadius: "999px", fontSize: ".85rem",
-    background: active ? "linear-gradient(135deg,#F5C542,#f0b429)" : "var(--surface)",
-    color: active ? "#1a1206" : "var(--muted)",
+    background: active ? "var(--accent)" : "var(--surface)",
+    color: active ? "var(--accent-ink)" : "var(--muted)",
     border: active ? "none" : "1px solid var(--line)", fontWeight: 700,
   };
 }
