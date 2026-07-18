@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, getJSONSafe } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
+import { WidgetSkeleton } from "../../components/Skeleton";
 
 const money = (cents) => `$${(Number(cents || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const stateCls = (s) => (s === 2 ? "ok" : [3, 4, 6, 7].includes(s) ? "warn" : "");
@@ -49,14 +50,14 @@ export default function MerchantDashboard() {
 
   return (
     <div>
-      {stats && (
-        <div className="wgrid">
+      {stats ? (
+        <div className="wgrid stagger">
           <div className="wcard gold"><div className="ic">💰</div><div><div className="v">{money(stats.collected)}</div><div className="l">Collected (paid)</div></div></div>
           <div className="wcard violet"><div className="ic">🟢</div><div><div className="v">{money(stats.my_net)}</div><div className="l">My Net</div></div></div>
           {!stats.is_sub && <div className="wcard"><div className="ic">🏦</div><div><div className="v">{money(stats.sub_earnings)}</div><div className="l">From Sub-Merchants</div></div></div>}
           <div className="wcard"><div className="ic">🧾</div><div><div className="v">{stats.paid}/{stats.orders}</div><div className="l">Paid / Orders</div></div></div>
         </div>
-      )}
+      ) : <WidgetSkeleton count={4} />}
 
       <div className="grid two">
         <form className="card" style={{ padding: "1.6rem" }} onSubmit={createLink}>

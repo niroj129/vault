@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiFetch } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
+import { WidgetSkeleton, TableSkeleton } from "../../components/Skeleton";
 
 const num = (v) => Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
 
@@ -19,11 +20,16 @@ export default function AdminOverview() {
     }
   }, [token]);
 
-  if (!s) return <div className="muted">Loading…</div>;
+  if (!s) return (
+    <div>
+      <WidgetSkeleton count={8} />
+      <TableSkeleton rows={5} cols={4} />
+    </div>
+  );
 
   return (
     <div>
-      <div className="wgrid">
+      <div className="wgrid stagger">
         <W ic="👥" v={s.players} l="Players" cls="violet" />
         <W ic="🎮" v={`${s.active_games}/${s.total_games}`} l="Active Games" />
         <W ic="💵" v={`$${num(s.today_loads)}`} l="Loads Today" cls="gold" />

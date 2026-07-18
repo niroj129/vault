@@ -86,6 +86,31 @@ select:focus-visible, textarea:focus-visible, summary:focus-visible,
   }
 }
 
+/* ===== Motion system ===== */
+:root { --ease: cubic-bezier(.32, .72, 0, 1); }
+/* page-enter (every route change, via app/template.js) */
+.page-enter { animation: page-enter .42s var(--ease) both; }
+@keyframes page-enter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+/* staggered rise for direct children of a .stagger container on mount */
+.stagger > * { animation: rise-in .5s var(--ease) both; }
+.stagger > *:nth-child(1){animation-delay:.02s} .stagger > *:nth-child(2){animation-delay:.06s}
+.stagger > *:nth-child(3){animation-delay:.10s} .stagger > *:nth-child(4){animation-delay:.14s}
+.stagger > *:nth-child(5){animation-delay:.18s} .stagger > *:nth-child(6){animation-delay:.22s}
+.stagger > *:nth-child(7){animation-delay:.26s} .stagger > *:nth-child(8){animation-delay:.30s}
+/* smooth theme/surface color transitions */
+.card, .wcard, .stat, .btn, .badge, .tile, .admin-side, .nav, input, select, textarea {
+  transition-property: background-color, border-color, color, box-shadow, transform;
+  transition-duration: .2s; transition-timing-function: var(--ease);
+}
+/* skeleton loaders (per UX guideline: show feedback during async) */
+.skeleton { position: relative; overflow: hidden; background: var(--surface-2); border-radius: var(--radius-sm); }
+.skeleton::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.06), transparent);
+  animation: shimmer 1.3s infinite; }
+@keyframes shimmer { 100% { transform: translateX(100%); } }
+.sk-line { height: 12px; margin: .5em 0; }
+.sk-row { display: flex; gap: 12px; align-items: center; }
+
 /* comfortable, consistent body sizing */
 body { font-size: 15.5px; }
 p { margin: 0 0 .8em; }
@@ -101,7 +126,9 @@ h2, h3 { letter-spacing: -.01em; }
   border-radius: 10px; padding: .7em 1.3em; font-size: .93rem; line-height: 1;
   transition: transform .12s ease, box-shadow .2s ease, background .15s ease, border-color .15s ease;
 }
-.btn:active { transform: translateY(1px); }
+.btn { will-change: transform; }
+.btn:hover { transform: translateY(-1px); }
+.btn:active { transform: translateY(0) scale(.98); }
 .btn-primary { background: var(--accent); color: var(--accent-ink); font-weight: 700; box-shadow: 0 4px 14px rgba(0, 231, 1, .22); }
 .btn-primary:hover { background: var(--accent-2); box-shadow: 0 6px 18px rgba(0, 231, 1, .32); }
 .btn-secondary { background: var(--secondary); color: #fff; }

@@ -16,7 +16,10 @@ function SettingsForm({ title, endpoint, fields, token }) {
       fields.forEach((f) => { body[f.name] = f.type === "checkbox" ? !!data[f.name] : (data[f.name] ?? ""); });
       await apiFetch(endpoint, { method: "PUT", token, body });
       setMsg("Saved ✔"); setTimeout(() => setMsg(""), 2500);
-    } catch { setMsg("Save failed"); }
+    } catch (err) {
+      const d = err.data;
+      setMsg(d && typeof d === "object" ? "Save failed: " + Object.entries(d).map(([k, v]) => `${k} — ${v}`).join("; ") : (err.message || "Save failed"));
+    }
   }
 
   if (!data) return <div className="card" style={{ padding: "1.6rem" }}><span className="muted">Loading…</span></div>;
@@ -24,7 +27,7 @@ function SettingsForm({ title, endpoint, fields, token }) {
   return (
     <form className="card" style={{ padding: "1.6rem" }} onSubmit={save}>
       <h3>{title}</h3>
-      {msg && <div className="alert ok small">{msg}</div>}
+      {msg && <div className={`alert ${msg.includes("✔") ? "ok" : "err"} small`}>{msg}</div>}
       <div className="form-grid">
         {fields.map((f) => (
           <label key={f.name} className={f.type === "textarea" || f.full ? "full" : ""}>

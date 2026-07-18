@@ -97,7 +97,16 @@ class SiteSettingsView(APIView):
 
     def put(self, request):
         obj = SiteSettings.load()
-        ser = SiteSettingsSerializer(obj, data=request.data, partial=True)
+        data = {k: v for k, v in request.data.items()}
+        # empty IP -> null (blank strings fail IP validation)
+        if data.get("game_api_force_ip") in ("", None):
+            data["game_api_force_ip"] = None
+        # empty numeric fields -> skip (partial update keeps current value)
+        for k in ("points_threshold", "load_amount", "pay_min_amount",
+                  "pay_max_amount"):
+            if k in data and str(data[k]).strip() == "":
+                data.pop(k)
+        ser = SiteSettingsSerializer(obj, data=data, partial=True)
         ser.is_valid(raise_exception=True)
         ser.save()
         return Response(ser.data)
