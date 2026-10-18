@@ -221,3 +221,14 @@ class Adapter:
 
     def find_platform_id(self, login):
         return login.platform_user_id
+
+    def search_accounts(self, query, limit=30):
+        """Players on the platform whose login contains `query` (everyone, newest first, when empty).
+        -> list of {username, platform_id, balance, created, last_seen, banned}. Most platforms
+        only look an account up by its exact name and have no player list."""
+        raise NotSupported("This platform can only look up an account by its exact login name.")
+
+    def trade_history(self, login, days=30):
+        """The platform's own record of loads and redeems for one account, newest first:
+        -> list of {time, amount (+load / −redeem), balance_before, balance_after}."""
+        raise NotSupported("This platform doesn't give out its own transaction history.")

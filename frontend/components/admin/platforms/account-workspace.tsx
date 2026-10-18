@@ -20,6 +20,7 @@ import { ago, dateTime, money } from "@/lib/format";
 import type { AccountActivity, AccountHistory, AdminUser, Game, Platform, PlatformLookup } from "@/lib/types";
 import { LinkDialog } from "./link-dialog";
 import { KickDialog, ResetPasswordDialog } from "./account-tools";
+import { TransactionsTab } from "./transactions-tab";
 
 const ACTIVITY: Record<AccountActivity["type"], { icon: LucideIcon; label: string }> = {
   load: { icon: Wallet, label: "Loaded" }, freeplay: { icon: Gift, label: "Free play" }, cashout: { icon: Receipt, label: "Cash out" },
@@ -140,30 +141,7 @@ export function AccountWorkspace({ platform, username, onChanged, onCreate }: { 
           )}
         </TabsContent>
 
-        <TabsContent value="transactions">
-          {!login ? <p className="glass rounded-xl border p-6 text-center text-sm text-muted-foreground">The ledger starts once this account is linked to a player.</p>
-            : !hist ? <Skeleton className="h-40 rounded-xl" />
-            : !hist.transactions.length ? <p className="glass rounded-xl border p-6 text-center text-sm text-muted-foreground">No loads or redeems sent to {platform.name} yet.</p> : (
-              <div className="glass overflow-x-auto rounded-xl border">
-                <Table>
-                  <caption className="sr-only">Loads and redeems sent to {platform.name} for {res.username}, newest first</caption>
-                  <TableHeader><TableRow><TableHead>When</TableHead><TableHead>Type</TableHead><TableHead className="text-right">Amount</TableHead><TableHead className="text-right">Balance after</TableHead><TableHead>Method</TableHead><TableHead>By</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
-                  <TableBody>
-                    {hist.transactions.map((t) => (
-                      <TableRow key={t.id}>
-                        <TableCell className="whitespace-nowrap">{dateTime(t.created_at)}</TableCell>
-                        <TableCell>{t.kind === "load" ? "Load" : "Redeem"}</TableCell>
-                        <TableCell className={`text-right font-semibold tabular-nums ${t.kind === "load" ? "text-success" : ""}`}>{t.kind === "load" ? "+" : "−"}{money(t.amount)}</TableCell>
-                        <TableCell className="text-right tabular-nums">{t.balance_after != null && t.balance_after !== "" ? money(t.balance_after) : "—"}</TableCell>
-                        <TableCell>{t.method || "—"}</TableCell><TableCell>{t.operator || "—"}</TableCell>
-                        <TableCell><StatusBadge tone={tone(t.status)}>{t.status}</StatusBadge>{t.status !== "success" && t.note ? <span className="mt-1 block max-w-48 text-xs text-muted-foreground">{t.note}</span> : null}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-        </TabsContent>
+        <TabsContent value="transactions"><TransactionsTab platform={platform} username={res.username} linked={!!login} hist={hist} /></TabsContent>
 
         <TabsContent value="details">
           <dl className="grid gap-2 sm:grid-cols-2">

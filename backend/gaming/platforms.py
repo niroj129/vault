@@ -196,6 +196,51 @@ def platform_link(request, pk):
 
 @api_view(["GET"])
 @permission_classes([IsAdminRole])
+def platform_search(request, pk):
+    """Search the players on the platform itself (not just the ones tied to this site).
+    Only platforms with a player list can do it; the rest say so and need the exact login."""
+    from .providers import NotSupported
+    provider = get_object_or_404(_providers(), pk=pk)
+    q = (request.query_params.get("q") or "").strip()
+    try:
+        rows = service.adapter_for(provider).search_accounts(q, 30)
+    except NotSupported as e:
+        return Response({"supported": False, "results": [], "message": str(e)})
+    except service.ApiError as e:
+        return bad(str(e))
+    mine = {lg.username.lower(): lg for lg in GameLogin.objects.filter(game__provider=provider).select_related("user")}
+    for r in rows:
+        lg = mine.get(r["username"].lower())
+        r["linked"] = {"id": lg.user_id, "username": lg.user.username, "full_name": lg.user.full_name} if lg else None
+    scope = getattr(service.adapter_for(provider), "search_scope", "all")
+    note = "" if scope == "all" else f"{provider.name} only lists players with a low balance today — to find anyone else, type their exact login."
+    return Response({"supported": True, "scope": scope, "results": rows, "message": note})
+
+
+@api_view(["GET"])
+@permission_classes([IsAdminRole])
+def platform_remote_history(request, pk):
+    """The platform's own records for an account (what the game says happened, not just what we sent)."""
+    from .providers import NotSupported
+    provider = get_object_or_404(_providers(), pk=pk)
+    username = (request.query_params.get("username") or "").strip()
+    if not username:
+        return bad("Enter the game login name.")
+    ad = service.adapter_for(provider)
+    tmp = GameLogin(username=username)
+    try:
+        if getattr(ad, "needs_platform_id", False):
+            tmp.platform_user_id = str(service._call(ad.find_platform_id, tmp) or "")
+        rows = ad.trade_history(tmp)
+    except NotSupported as e:
+        return Response({"supported": False, "rows": [], "message": str(e)})
+    except (service.ApiError, service.GameError) as e:
+        return bad(str(e))
+    return Response({"supported": True, "rows": rows, "message": ""})
+
+
+@api_view(["GET"])
+@permission_classes([IsAdminRole])
 def platform_accounts(request, pk):
     """Every account on this platform that's tied to a site player (last known balances)."""
     provider = get_object_or_404(_providers(), pk=pk)

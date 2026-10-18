@@ -121,6 +121,22 @@ class AshxAdapter(Adapter):
                            platform_user_id=str(data.get("gameid") or ""),
                            play_url=data.get("webloginurl") or "")
 
+    def trade_history(self, login, days=30):
+        from datetime import datetime, timedelta
+        now = datetime.utcnow()
+        data = self.call("getTradeRecord", {"account": login.username, "fromDate": (now - timedelta(days=min(days, 30))).strftime("%Y-%m-%d 00:00:00"),
+                                            "toDate": (now + timedelta(days=1)).strftime("%Y-%m-%d 00:00:00")})
+        if data.get("code") != 200:
+            raise ApiError(str(data.get("msg") or "The platform wouldn't give its records."))
+        rows = []
+        for r in data.get("data") or []:
+            r = {str(k).lower(): v for k, v in r.items()}
+            amount = float(r.get("score") or 0)
+            before = r.get("balancebefore")
+            rows.append({"time": str(r.get("inserttime") or ""), "amount": amount, "balance_before": before,
+                         "balance_after": round(float(before) + amount, 2) if before not in (None, "") else None})
+        return sorted(rows, key=lambda x: x["time"], reverse=True)
+
     def agent_balance(self):
         self._key(fresh=True)
         return Result(ok=True, message="OK",

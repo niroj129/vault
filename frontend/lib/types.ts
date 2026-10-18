@@ -45,6 +45,11 @@ export interface Platform {
 }
 export interface PlatformLogin extends StaffLogin { player: { id: number; username: string; full_name: string }; last_balance?: string | null; last_balance_at?: string | null }
 export interface PlatformLookup { found: boolean; message: string; username: string; balance: string | number | null; platform_user_id: string; play_url: string; login: PlatformLogin | null }
+/** A player as the game platform itself lists them. */
+export interface RemotePlayer { username: string; platform_id: string; balance: Money | null; created: string; last_seen: string; banned: boolean; linked: { id: number; username: string; full_name: string } | null }
+export interface RemoteSearch { supported: boolean; scope?: "all" | "low_balance"; results: RemotePlayer[]; message: string }
+export interface RemoteTrade { time: string; amount: number; balance_before: Money | null; balance_after: Money | null }
+export interface RemoteHistory { supported: boolean; rows: RemoteTrade[]; message: string }
 export interface AccountTxn { id: number; kind: "load" | "withdraw"; amount: Money; status: string; method: string; operator: string; balance_after: Money | null; order_id: string; note: string; created_at: string }
 export interface AccountActivity { key: string; type: "load" | "freeplay" | "cashout" | "redeem" | "freeload"; at: string; amount: Money; credits: Money; method: string; status: string; load_status: string; promo: string; bonus: Money }
 export interface AccountHistory { linked: boolean; transactions: AccountTxn[]; activity: AccountActivity[]; totals: { loaded: Money; redeemed: Money; paid: Money; cashed_out: Money } }

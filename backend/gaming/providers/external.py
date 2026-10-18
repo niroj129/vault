@@ -89,6 +89,26 @@ class ExternalAdapter(Adapter):
         return self.result(data, balance=(data.get("data") or {}).get("user_balance"),
                            platform_user_id=uid)
 
+    # Juwa / Game Vault have no player list; the only list they give is "players with a low balance today"
+    search_scope = "low_balance"
+
+    def search_accounts(self, query, limit=30):
+        from datetime import date
+        out = []
+        for page in (1, 2, 3):
+            data = self.call("external/getLowDepositUsers", {"query_date": date.today().isoformat(), "page": page, "page_size": 50})
+            if data.get("code") != 0:
+                raise ApiError(str(data.get("msg") or "The platform wouldn't list its players."))
+            rows = data.get("data") or []
+            for r in rows:
+                name = str(r.get("account_name") or "")
+                if name and (not query or query.lower() in name.lower()):
+                    out.append({"username": name, "platform_id": str(r.get("user_id") or ""), "balance": r.get("user_balance"),
+                                "created": "", "last_seen": "", "banned": False})
+            if len(rows) < 50:
+                break
+        return out[:limit]
+
     def agent_balance(self):
         data = self.call("agentBalance")
         return self.result(data, balance=(data.get("data") or {}).get("agent_balance"))

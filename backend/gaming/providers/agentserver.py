@@ -79,6 +79,15 @@ class AgentServerAdapter(Adapter):
                 break
         return ""
 
+    def search_accounts(self, query, limit=30):
+        data = self.call("GET", "/api/player/playerList", params={"limit": limit, "page": 1, **({"account": query} if query else {})})
+        out = []
+        for r in data.get("data") or []:
+            out.append({"username": str(r.get("Account") or ""), "platform_id": str(r.get("id") or ""), "balance": r.get("score"),
+                        "created": r.get("AddDate") or "", "last_seen": (r.get("lasttime") if r.get("lasttime") not in (None, "-") else "") or "",
+                        "banned": r.get("account_using") not in (None, 1, "1")})
+        return out
+
     def find_platform_id(self, login):
         return login.platform_user_id or self._lookup_id(login.username)
 

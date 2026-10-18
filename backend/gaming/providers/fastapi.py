@@ -134,6 +134,22 @@ class FastApiAdapter(Adapter):
         data = self.call("/fast/user/balance", {"account": self.short(login)})
         return self.result(data, balance=(data.get("data") or {}).get("balance"))
 
+    def trade_history(self, login, days=30):
+        from datetime import date, timedelta
+        data = self.call("/fast/user/tradeList", {"account": self.short(login), "start_date": (date.today() - timedelta(days=days)).isoformat(),
+                                                  "end_date": date.today().isoformat(), "page": 0, "page_num": 50})
+        if data.get("code") != 200:
+            raise ApiError(CODES.get(data.get("code"), str(data.get("message") or "The platform wouldn't give its records.")))
+        from datetime import datetime
+        rows = []
+        for r in (data.get("data") or {}).get("list") or []:
+            t = r.get("time")
+            when = datetime.fromtimestamp(int(t)).strftime("%Y-%m-%d %H:%M:%S") if str(t).isdigit() else str(t or "")
+            before, amount = r.get("start_score"), float(r.get("score") or 0)
+            rows.append({"time": when, "amount": amount, "balance_before": before,
+                         "balance_after": round(float(before) + amount, 2) if before not in (None, "") else None})
+        return rows
+
     def agent_balance(self):
         if self.p.app_id and self.p.secret_key:
             raise ApiError("FastApi reports the agent balance only at agent "

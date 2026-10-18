@@ -1200,3 +1200,75 @@ class PlatformHistoryTests(PlatformConsoleTests):
         r = self.c.get(self.url("history") + "?username=nobody")
         self.assertEqual((r.status_code, r.data["linked"], r.data["transactions"]), (200, False, []))
         self.assertEqual(client_for(A, "agent1").get(self.url("history") + "?username=x").status_code, 403)
+
+
+class GameSideSearchTests(TestCase):
+    """Search and history taken from the game platform itself."""
+
+    class Resp:
+        status_code, text = 200, ""
+
+        def __init__(self, body):
+            self.body = body
+
+        def json(self):
+            return self.body
+
+    def test_agent_server_partial_search_maps_the_platforms_player_list(self):
+        from django.core.cache import cache
+        from .providers.agentserver import AgentServerAdapter
+        cache.clear()
+        p = GameProvider.objects.create(name="Cash Machine", kind="agentserver", base_url="https://x", agent_name="a", agent_password="p")
+        rows = [{"Account": "Princess01", "id": 5, "score": 3.1, "AddDate": "2026-10-05 18:36:07", "lasttime": "2026-10-05 21:44:41", "account_using": 1},
+                {"Account": "Priscilla", "id": 6, "score": 0, "AddDate": "x", "lasttime": "-", "account_using": 0}]
+        seen = []
+        ad = AgentServerAdapter(p)
+        ad.call = lambda method, path, params=None, data=None: (seen.append(params), {"status_code": 200, "data": rows})[1]
+        out = ad.search_accounts("Pri")
+        self.assertEqual(seen[0]["account"], "Pri")
+        self.assertEqual([(r["username"], r["platform_id"], r["banned"], r["last_seen"]) for r in out],
+                         [("Princess01", "5", False, "2026-10-05 21:44:41"), ("Priscilla", "6", True, "")])
+
+    def test_ashx_trade_history_reads_the_games_own_records(self):
+        from .providers.ashx import AshxAdapter
+        p = GameProvider.objects.create(name="Orion", kind="ashx", base_url="https://x", agent_name="a", agent_password="p")
+        ad = AshxAdapter(p)
+        ad.call = lambda action, params=None, retry=True: {"code": 200, "data": [
+            {"Account": "a1", "BalanceBefore": 100.0, "Score": -50.0, "InsertTime": "2026/10/04 11:51:09"},
+            {"account": "a1", "balancebefore": 0, "score": 100, "inserttime": "2026/10/03 09:00:00"}]}
+        rows = ad.trade_history(type("L", (), {"username": "a1"})())
+        self.assertEqual([(r["amount"], r["balance_after"]) for r in rows], [(-50.0, 50.0), (100.0, 100.0)])  # newest first
+
+    def test_juwa_style_platforms_list_only_low_balance_players_and_have_no_history(self):
+        from .providers import NotSupported
+        from .providers.external import ExternalAdapter
+        ad = ExternalAdapter(GameProvider.objects.create(name="Juwa", kind="external", base_url="https://x", agent_name="1", secret_key="s"))
+        ad.call = lambda endpoint, params=None: {"code": 0, "data": [{"account_name": "user011110", "user_balance": 10, "user_id": 88880188}, {"account_name": "zed", "user_balance": 1, "user_id": 2}]}
+        self.assertEqual([r["username"] for r in ad.search_accounts("user")], ["user011110"])
+        self.assertEqual(ad.search_scope, "low_balance")
+        with self.assertRaises(NotSupported):
+            ad.trade_history(type("L", (), {"username": "a"})())
+
+
+class PlatformSearchApiTests(PlatformConsoleTests):
+    class Ad(PlatformConsoleTests.Ad):
+        def search_accounts(self, query, limit=30):
+            allr = [{"username": "someone", "platform_id": "1", "balance": 10, "created": "", "last_seen": "", "banned": False},
+                    {"username": "other", "platform_id": "2", "balance": 0, "created": "", "last_seen": "", "banned": False}]
+            return [r for r in allr if query.lower() in r["username"].lower()]
+
+        def trade_history(self, login, days=30):
+            return [{"time": "2026/10/04 11:00:00", "amount": 20.0, "balance_before": 0, "balance_after": 20.0}]
+
+    def test_search_comes_from_the_game_and_marks_the_linked_ones(self):
+        self.c.post(self.url("link"), {"username": "someone", "user": self.ann.id}, format="json")
+        r = self.c.get(self.url("search") + "?q=o")
+        self.assertTrue(r.data["supported"])
+        self.assertEqual(sorted(x["username"] for x in r.data["results"]), ["other", "someone"])  # both contain an "o"
+        self.assertEqual({x["username"]: bool(x["linked"]) for x in r.data["results"]}, {"someone": True, "other": False})
+        self.assertEqual([x["username"] for x in self.c.get(self.url("search") + "?q=oth").data["results"]], ["other"])
+
+    def test_remote_history_and_permissions(self):
+        r = self.c.get(self.url("remote-history") + "?username=someone")
+        self.assertEqual((r.data["supported"], r.data["rows"][0]["amount"]), (True, 20.0))
+        self.assertEqual(client_for(A, "agent1").get(self.url("search")).status_code, 403)
