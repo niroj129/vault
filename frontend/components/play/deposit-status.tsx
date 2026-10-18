@@ -63,6 +63,19 @@ export function DepositStatus({ refId, onNew }: { refId: string; onNew: () => vo
     return () => clearInterval(t);
   }, [done, load]);
 
+  // BytePayout sends some methods to a hosted checkout page: go straight there, once per
+  // payment (so coming back to this screen doesn't bounce the player out again).
+  const checkoutUrl = d && d.status === "pending" && !d.direct && !d.tag ? d.checkout_url : "";
+  useEffect(() => {
+    if (!checkoutUrl) return;
+    const key = `pay-redirected:${refId}`;
+    try {
+      if (sessionStorage.getItem(key)) return;
+      sessionStorage.setItem(key, "1");
+    } catch { return; }
+    window.location.assign(checkoutUrl);
+  }, [checkoutUrl, refId]);
+
   async function sendProof(f: File) {
     setProof(f); setSending(true); setError("");
     const fd = new FormData(); fd.append("proof", f);
@@ -129,7 +142,7 @@ export function DepositStatus({ refId, onNew }: { refId: string; onNew: () => vo
               </>
             ) : d.checkout_url ? (
               <>
-                <p>Finish paying on the secure {d.method_label} page. This screen updates by itself.</p>
+                <p>Taking you to the secure {d.method_label} page… If nothing happens, use the button. This screen updates by itself.</p>
                 <Button asChild size="lg"><a href={d.checkout_url}><ExternalLink aria-hidden />Open {d.method_label} checkout</a></Button>
               </>
             ) : <p className="text-muted-foreground">Waiting for the payment provider…</p>}
