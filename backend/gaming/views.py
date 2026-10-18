@@ -20,6 +20,7 @@ from rest_framework.throttling import UserRateThrottle
 
 from accounts.models import User
 from accounts.permissions import IsAdminOrAgent, IsAdminRole
+from casino_backend.search import token_filter
 from catalog.models import Game, GameLogin
 from content.models import SiteSettings
 from tenants.context import use_tenant
@@ -710,10 +711,7 @@ def admin_deposits(request):
         qs = qs.filter(gateway=p["gateway"])
     if (p.get("user") or "").isdigit():
         qs = qs.filter(user_id=int(p["user"]))
-    if p.get("q"):
-        q = p["q"].strip()
-        qs = qs.filter(Q(reference__icontains=q) | Q(user__username__icontains=q)
-                       | Q(game__name__icontains=q))
+    qs = token_filter(qs, p.get("q"), ["reference", "user__username", "user__full_name", "game__name"])
     try:
         limit = max(1, min(int(p.get("limit") or 200), 200))
     except ValueError:

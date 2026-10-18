@@ -16,6 +16,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/in
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiFetch, errorText } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { matches, rank } from "@/lib/search";
 import type { AdminUser, Game } from "@/lib/types";
 
 const schema = z.object({
@@ -39,7 +40,7 @@ export function RecordPayment({ onClose, onDone }: { onClose: () => void; onDone
   useEffect(() => { apiFetch<Game[]>("/games/", { token }).then(setGames).catch(() => {}); }, [token]);
   useEffect(() => {
     const t = setTimeout(() => apiFetch<AdminUser[]>("/users/?role=user", { token })
-      .then((rows) => setPeople(rows.filter((u) => !q || `${u.username} ${u.full_name}`.toLowerCase().includes(q.toLowerCase())).slice(0, 8))).catch(() => {}), 200);
+      .then((rows) => setPeople(rank(rows.filter((u) => matches(`${u.username} ${u.full_name}`, q)), q, (u) => `${u.username} ${u.full_name}`).slice(0, 8))).catch(() => {}), 200);
     return () => clearTimeout(t);
   }, [q, token]);
 

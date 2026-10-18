@@ -28,9 +28,9 @@ const NAV: [string | null, Item[], boolean?][] = [
   ["Money", [["/admin/deposits", Wallet, "Deposits", "deposits_needing_staff"], ["/admin/redeems", Receipt, "Cash outs", "redeems_waiting"], ["/admin/bytepayout", Landmark, "BytePayout"], ["/admin/mail", Mail, "Payment emails", "emails_unmatched"], ["/admin/transactions", BarChart3, "Transactions & shifts"]]],
   ["Players", [["/admin/players", Users, "Players & staff"], ["/admin/reports", Flag, "Reports", "open_reports"], ["/admin/logins", ShieldCheck, "Login activity"]]],
   ["Messages", [["/admin/messages", MessageCircle, "Inbox", "unanswered_chats"], ["/admin/phone", Phone, "Phone messaging"], ["/admin/support", LifeBuoy, "Platform support", "owner_chat_unread"]]],
-  ["Games", [["/admin/games", Gamepad2, "Games & images"], ["/admin/points", Zap, "Points & Telegram"], ["/admin/winners", Trophy, "Daily winners"], ["/admin/reviews", Star, "Reviews"]]],
+  ["Games", [["/admin/games", Gamepad2, "Games & images"], ["/admin/gameplatform", Layers, "Game platforms"], ["/admin/game-apis", Cog, "Connections"], ["/admin/points", Zap, "Points & Telegram"], ["/admin/winners", Trophy, "Daily winners"], ["/admin/reviews", Star, "Reviews"]]],
   ["Marketing", [["/admin/promotions", Gift, "Promotions"], ["/admin/announcements", Megaphone, "Announcements"], ["/admin/faq", HelpCircle, "FAQ"], ["/admin/seo", Search, "SEO"]]],
-  ["Advanced (not used now)", [["/admin/game-apis", Layers, "Game APIs"], ["/admin/gameplatform", Cog, "Agent console"], ["/admin/payments", Wallet, "Pay links & cashout"],
+  ["Advanced (not used now)", [["/admin/payments", Wallet, "Pay links & cashout"],
     ["/admin/settlement", BarChart3, "Settlement"]], true],
   [null, [["/admin/settings", Cog, "Settings"]]],
 ];

@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { apiFetch, errorText } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { matches, rank } from "@/lib/search";
 import type { AdminUser, Promo } from "@/lib/types";
 
 /** Pick the players a targeted promotion is for (or hidden from). Saves the whole list at once. */
@@ -34,7 +35,7 @@ export function PromoPlayers({ promo, onSaved }: { promo: Promo; onSaved: () => 
       .catch((e) => { toast.error(errorText(e)); setPeople([]); });
   }, [open, promo.id, token]);
 
-  const shown = useMemo(() => (people || []).filter((u) => !q.trim() || `${u.username} ${u.full_name}`.toLowerCase().includes(q.trim().toLowerCase())), [people, q]);
+  const shown = useMemo(() => rank((people || []).filter((u) => matches(`${u.username} ${u.full_name}`, q)), q, (u) => `${u.username} ${u.full_name}`), [people, q]);
   const toggle = (id: number, on: boolean) => setPicked((s) => { const n = new Set(s); if (on) n.add(id); else n.delete(id); return n; });
 
   async function save() {

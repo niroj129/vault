@@ -24,6 +24,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch, errorText, fieldErrors, mediaUrl } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { matches } from "@/lib/search";
 import { cn } from "@/lib/utils";
 
 export type FieldType = "text" | "textarea" | "number" | "email" | "url" | "date" | "password" | "select" | "checkbox" | "image";
@@ -201,7 +202,7 @@ export function ResourceManager<T extends Row>({
   }
 
   const q = query.trim().toLowerCase();
-  const searched = rows && searchKeys && q ? rows.filter((r) => searchKeys.some((k) => String(get(r, k) ?? "").toLowerCase().includes(q))) : rows;
+  const searched = rows && searchKeys && q ? rows.filter((r) => matches(searchKeys.map((k) => String(get(r, k) ?? "")).join(" "), q)) : rows;
   const visible = searched && filterRows ? filterRows(searched) : searched;
   const actions = (row: T) => (
     <div className="flex justify-end gap-1">

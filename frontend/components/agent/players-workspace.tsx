@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiFetch, errorText } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { matches, rank } from "@/lib/search";
 import { ago, money } from "@/lib/format";
 import type { AdminUser } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -61,17 +62,19 @@ export function PlayersWorkspace() {
   const changed = useCallback(() => { load(); reloadSummary(); }, [load, reloadSummary]);
 
   const shown = useMemo(() => {
-    const term = q.trim().toLowerCase();
+    const term = q.trim();
     const rows = (players || []).filter((p) => {
       if (filter === "active" && !p.is_active) return false;
       if (filter === "off" && p.is_active) return false;
       if (filter === "never" && (p.deposit_count || 0) > 0) return false;
-      return !term || `${p.username} ${p.full_name} ${p.phone || ""} ${p.email || ""}`.toLowerCase().includes(term);
+      return matches(`${p.username} ${p.full_name} ${p.phone || ""} ${p.email || ""}`, term);
     });
     const byName = (a: AdminUser, b: AdminUser) => (a.full_name || a.username).localeCompare(b.full_name || b.username);
-    return rows.sort(sort === "name" ? byName
+    const ordered = rows.sort(sort === "name" ? byName
       : sort === "loaded" ? (a, b) => Number(b.total_loaded || 0) - Number(a.total_loaded || 0) || byName(a, b)
       : (a, b) => (b.last_deposit ? Date.parse(b.last_deposit) : 0) - (a.last_deposit ? Date.parse(a.last_deposit) : 0) || byName(a, b));
+    // while searching, the closest matches (names that start with what you typed) come first
+    return term ? rank(ordered, term, (p) => `${p.username} ${p.full_name}`) : ordered;
   }, [players, q, filter, sort]);
   const current = players?.find((p) => p.id === openId) || null;
   const s = summary;

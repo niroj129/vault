@@ -38,6 +38,16 @@ export interface AdminUser extends User {
 
 /** The numbers at the top of the agent console. */
 export interface AgentSummary { players: number; active_players: number; to_load: number; to_check: number; cashouts_waiting: number; loaded_today: Money }
+/** A connected game platform (a Game APIs connection) and what's tied to it. */
+export interface Platform {
+  id: number; name: string; kind: string; kind_label: string; is_active: boolean; agent_balance: string | null;
+  last_checked: string | null; last_error: string; games: { id: number; name: string }[]; accounts: number;
+}
+export interface PlatformLogin extends StaffLogin { player: { id: number; username: string; full_name: string }; last_balance?: string | null; last_balance_at?: string | null }
+export interface PlatformLookup { found: boolean; message: string; username: string; balance: string | number | null; platform_user_id: string; play_url: string; login: PlatformLogin | null }
+export interface AccountTxn { id: number; kind: "load" | "withdraw"; amount: Money; status: string; method: string; operator: string; balance_after: Money | null; order_id: string; note: string; created_at: string }
+export interface AccountActivity { key: string; type: "load" | "freeplay" | "cashout" | "redeem" | "freeload"; at: string; amount: Money; credits: Money; method: string; status: string; load_status: string; promo: string; bonus: Money }
+export interface AccountHistory { linked: boolean; transactions: AccountTxn[]; activity: AccountActivity[]; totals: { loaded: Money; redeemed: Money; paid: Money; cashed_out: Money } }
 /** One player's account on one game, as staff see it (password included). */
 export interface StaffLogin { id: number; user: number; game: number; game_name: string; username: string; password: string; note: string; updated_at: string }
 

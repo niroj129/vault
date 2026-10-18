@@ -12,7 +12,7 @@ from catalog.views import (CategoryViewSet, FavoriteViewSet,
                            GameLoginViewSet, GameViewSet, ReviewViewSet,
                            my_game_logins)
 from chat import messenger, sendblue_setup, twilio_setup
-from gaming import views as gaming
+from gaming import platforms, views as gaming
 from tenants import analytics, bpledger, ownerchat
 from mailin import views as mail_views
 from tenants.views import TenantViewSet, platform_stats, platform_usage
@@ -144,6 +144,12 @@ api = [
     path("admin/redeems/", gaming.admin_redeems),
     path("admin/redeems/<int:pk>/<str:act>/", gaming.admin_redeem_action),
     path("admin/game-accounts/", gaming.staff_login_action),
+    path("admin/platforms/", platforms.platform_list),
+    path("admin/platforms/<int:pk>/lookup/", platforms.platform_lookup),
+    path("admin/platforms/<int:pk>/create/", platforms.platform_create),
+    path("admin/platforms/<int:pk>/link/", platforms.platform_link),
+    path("admin/platforms/<int:pk>/accounts/", platforms.platform_accounts),
+    path("admin/platforms/<int:pk>/history/", platforms.platform_history),
     path("admin/gateway-balance/", gaming.gateway_balance),
     path("admin/setup/", admin_setup),
     # platform (owner sells/manages casino sites)

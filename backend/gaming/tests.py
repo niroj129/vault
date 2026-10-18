@@ -1054,3 +1054,149 @@ class AgentConsoleApiTests(TestCase):
         r = self.c.post("/api/users/", {"username": "newbie", "password": "pass12345", "role": "admin"}, format="json")
         self.assertEqual(r.status_code, 201, r.content)
         self.assertEqual((r.data["role"], r.data["agent"]), ("user", self.agent.id))
+
+
+@override_settings(GAMING_SYNC_LOADS=True)
+class PlatformConsoleTests(TestCase):
+    """Admin platform console: look up any account on a platform, create, link, list."""
+
+    class Ad(FakeAdapter):
+        needs_platform_id = False
+
+        def balance(self, login):
+            if login.username == "ghost":
+                return Result(False, "Account does not exist")
+            return Result(True, "OK", balance="42.50", platform_user_id="77", play_url="https://play.test")
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        FakeAdapter.calls = []
+        self.a = make_tenant("alpha", A, feature_payments=True)
+        self.admin = make_user(self.a, "admin", role="admin")
+        self.ann = make_user(self.a, "ann")
+        self.agent = make_user(self.a, "agent1", role="agent")
+        with use_tenant(self.a):
+            self.p = GameProvider.objects.create(name="Orion Stars", kind="ashx", base_url="https://x", agent_name="a")
+            self.manual = GameProvider.objects.create(name="Hand", kind="manual")
+            self.game = Game.objects.create(name="Orion Stars", provider=self.p)
+        self.c = client_for(A, "admin")
+        patcher = mock.patch("gaming.service.adapter_for", self.Ad)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def url(self, tail):
+        return f"/api/admin/platforms/{self.p.id}/{tail}/"
+
+    def test_list_shows_connected_platforms_with_their_games(self):
+        r = self.c.get("/api/admin/platforms/")
+        self.assertEqual([x["name"] for x in r.data], ["Orion Stars"])  # manual ones aren't platforms
+        self.assertEqual(r.data[0]["games"][0]["name"], "Orion Stars")
+
+    def test_only_admins_can_use_it(self):
+        self.assertEqual(client_for(A, "agent1").get("/api/admin/platforms/").status_code, 403)
+        self.assertEqual(client_for(A, "ann").post(self.url("lookup"), {"username": "x"}, format="json").status_code, 403)
+
+    def test_lookup_finds_an_unlinked_account_and_a_missing_one(self):
+        r = self.c.post(self.url("lookup"), {"username": "someone"}, format="json")
+        self.assertTrue(r.data["found"])
+        self.assertEqual((str(r.data["balance"]), r.data["login"]), ("42.50", None))
+        r = self.c.post(self.url("lookup"), {"username": "ghost"}, format="json")
+        self.assertFalse(r.data["found"])
+        self.assertEqual(self.c.post(self.url("lookup"), {"username": " "}, format="json").status_code, 400)
+
+    def test_link_to_an_existing_player_then_lookup_shows_who_owns_it(self):
+        r = self.c.post(self.url("link"), {"username": "someone", "user": self.ann.id}, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.data["login"]["player"]["username"], "ann")
+        again = self.c.post(self.url("lookup"), {"username": "SOMEONE"}, format="json")
+        self.assertEqual(again.data["login"]["player"]["username"], "ann")
+        self.assertEqual(self.c.post(self.url("link"), {"username": "someone", "user": self.ann.id}, format="json").status_code, 400)
+
+    def test_link_can_make_a_new_site_player_and_refuses_unknown_accounts(self):
+        r = self.c.post(self.url("link"), {"username": "newguy", "new_player": True}, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.data["login"]["player"]["username"], "newguy")
+        self.assertTrue(r.data["site_password"])
+        self.assertEqual(self.c.post(self.url("link"), {"username": "ghost", "new_player": True}, format="json").status_code, 400)
+
+    def test_create_account_on_the_platform_with_and_without_a_player(self):
+        r = self.c.post(self.url("create"), {"username": "fresh01", "user": self.ann.id}, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual((r.data["login"]["username"], bool(r.data["password"])), ("fresh01", True))
+        self.assertIn(("create", "fresh01"), FakeAdapter.calls)
+        r = self.c.post(self.url("create"), {"username": "loose01"}, format="json")
+        self.assertEqual((r.status_code, r.data["login"]), (201, None))
+        self.assertEqual(self.c.post(self.url("create"), {"username": "ab"}, format="json").status_code, 400)  # too short for the platform
+        self.assertEqual(self.c.post(self.url("create"), {"username": "fresh02", "user": self.ann.id}, format="json").status_code, 400)  # ann already has one
+
+    def test_accounts_list_and_search(self):
+        self.c.post(self.url("link"), {"username": "someone", "user": self.ann.id}, format="json")
+        rows = self.c.get(self.url("accounts")).data
+        self.assertEqual([r["username"] for r in rows], ["someone"])
+        self.assertEqual(self.c.get(self.url("accounts") + "?q=zzz").data, [])
+        self.assertEqual(len(self.c.get(self.url("accounts") + "?q=ann").data), 1)
+
+
+class SearchTests(TestCase):
+    """Partial words match everything similar; several words all have to match."""
+
+    def setUp(self):
+        a = make_tenant("alpha", A, feature_payments=True)
+        make_user(a, "admin", role="admin")
+        self.ann = make_user(a, "maya_lopez", full_name="Maya Lopez")
+        self.bob = make_user(a, "stan99", full_name="Stan Brown")
+        make_user(a, "zed")
+        with use_tenant(a):
+            self.p = GameProvider.objects.create(name="Orion Stars", kind="ashx", base_url="https://x", agent_name="a")
+            g = Game.objects.create(name="Orion Stars", provider=self.p)
+            GameLogin.objects.create(user=self.ann, game=g, username="maya_lopez_o")
+            GameLogin.objects.create(user=self.bob, game=g, username="stanley")
+            Deposit.objects.create(user=self.ann, game=g, method="cash", gateway="manual", amount=5, credit_amount=5, status="approved")
+        self.c = client_for(A, "admin")
+
+    def names(self, q):
+        return sorted(r["username"] for r in self.c.get(f"/api/admin/platforms/{self.p.id}/accounts/", {"q": q}).data)
+
+    def test_a_single_letter_shows_everything_similar(self):
+        self.assertEqual(self.names("l"), ["maya_lopez_o", "stanley"])  # both contain an "l"
+        self.assertEqual(self.names("s"), ["stanley"])                  # only one has an "s"
+
+    def test_partial_words_in_any_case_and_order(self):
+        self.assertEqual(self.names("MAYA"), ["maya_lopez_o"])
+        self.assertEqual(self.names("lop maya"), ["maya_lopez_o"])      # both words, any order
+        self.assertEqual(self.names("maya_lo"), ["maya_lopez_o"])
+        self.assertEqual(self.names("stan brown"), ["stanley"])         # matched on the player's name
+        self.assertEqual(self.names("nothing"), [])
+        self.assertEqual(len(self.names("")), 2)
+
+    def test_deposit_search_is_forgiving_too(self):
+        n = lambda q: len(self.c.get("/api/admin/deposits/", {"q": q}).data["results"])  # noqa: E731
+        self.assertEqual((n("may"), n("lopez"), n("orion"), n("zzz")), (1, 1, 1, 0))
+
+
+@override_settings(GAMING_SYNC_LOADS=True)
+class PlatformHistoryTests(PlatformConsoleTests):
+    """The per-account history: ledger, activity and totals."""
+
+    def test_history_for_a_linked_account_shows_ledger_activity_and_totals(self):
+        self.c.post(self.url("link"), {"username": "someone", "user": self.ann.id}, format="json")
+        with use_tenant(self.a):
+            login = GameLogin.objects.get(username="someone")
+            from content.models import GameTxn
+            GameTxn.objects.create(kind="load", user=self.ann, game=self.game, account_name="someone", amount=20, status="success", user_balance="20", operator="admin")
+            GameTxn.objects.create(kind="withdraw", user=self.ann, game=self.game, account_name="someone", amount=5, status="success", user_balance="15", operator="admin")
+            GameTxn.objects.create(kind="load", user=self.ann, game=self.game, account_name="someone", amount=9, status="failed")
+            Deposit.objects.create(user=self.ann, game=self.game, method="cash", gateway="manual", amount=20, credit_amount=20, status="approved", load_status="loaded")
+            Redeem.objects.create(user=self.ann, game=self.game, amount=5, payout_method="cashapp", payout_handle="$a", status="paid")
+        r = self.c.get(self.url("history") + "?username=someone")
+        self.assertTrue(r.data["linked"])
+        self.assertEqual(len(r.data["transactions"]), 3)
+        t = r.data["totals"]
+        self.assertEqual((float(t["loaded"]), float(t["redeemed"]), float(t["paid"]), float(t["cashed_out"])), (20, 5, 20, 5))  # the failed load isn't counted
+        self.assertEqual(sorted(a["type"] for a in r.data["activity"]), ["cashout", "load", "redeem"])  # the staff redeem shows up too
+
+    def test_history_for_an_unlinked_account_is_empty_not_an_error(self):
+        r = self.c.get(self.url("history") + "?username=nobody")
+        self.assertEqual((r.status_code, r.data["linked"], r.data["transactions"]), (200, False, []))
+        self.assertEqual(client_for(A, "agent1").get(self.url("history") + "?username=x").status_code, 403)
