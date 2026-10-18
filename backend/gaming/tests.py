@@ -938,3 +938,75 @@ class AshxReplyStyleTests(TestCase):
         with self.assertRaises(ApiError) as cm:
             self.run_with({"code": "201", "msg": "Login failed. Please check and try again."}, {})
         self.assertIn("Login failed", str(cm.exception))
+
+
+class FastApiDocumentTests(TestCase):
+    """FastApi (Ultra Thunder): agent login is signed without a secret; passwords reset by the agent."""
+
+    class Resp:
+        status_code, text = 200, ""
+
+        def __init__(self, body):
+            self.body = body
+
+        def json(self):
+            return self.body
+
+    def provider(self):
+        from django.core.cache import cache
+        cache.clear()
+        return GameProvider.objects.create(name="Ultra Thunder", kind="fastapi", base_url="https://api.test",
+                                           agent_name="agent9", agent_password="Pass1234")
+
+    def test_agent_login_is_signed_without_a_secret_and_balance_is_read(self):
+        from .providers.fastapi import FastApiAdapter, sign as fsign, md5 as _m
+        from cryptography.hazmat.primitives import padding
+        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+        import base64
+        key = md5(md5("pass1234")).encode()
+        padder = padding.PKCS7(128).padder()
+        enc = Cipher(algorithms.AES(key), modes.CBC(b"I" * 16)).encryptor()
+        blob = base64.b64encode(b"I" * 16 + enc.update(padder.update(b"thesecret") + padder.finalize()) + enc.finalize()).decode()
+        seen = []
+
+        def fake(provider, method, url, data=None, **kw):
+            seen.append((url, dict(data)))
+            return self.Resp({"code": 200, "data": {"balance": 250.5, "appid": "app1", "appsecret_encrypted": blob}})
+        with mock.patch("gaming.providers.fastapi.http", fake):
+            res = FastApiAdapter(self.provider()).agent_balance()
+        self.assertTrue(res.ok)
+        self.assertEqual(str(res.balance), "250.5")
+        url, sent = seen[0]
+        self.assertTrue(url.endswith("/fast/agent/login"))
+        self.assertEqual(sent["sign"], fsign({k: v for k, v in sent.items() if k != "sign"}, ""))  # no secret appended
+
+    def test_login_falls_back_to_the_old_signature_only_when_rejected(self):
+        from .providers.fastapi import FastApiAdapter
+        calls = []
+
+        def fake(provider, method, url, data=None, **kw):
+            calls.append(dict(data))
+            return self.Resp({"code": 4, "message": "bad sign"})
+        with mock.patch("gaming.providers.fastapi.http", fake):
+            with self.assertRaises(Exception):
+                FastApiAdapter(self.provider()).agent_balance()
+        self.assertEqual(len(calls), 2)  # one without the secret, one with the agent password
+
+    def test_reset_password_uses_the_agent_reset_call(self):
+        from .providers.fastapi import FastApiAdapter
+        p = self.provider()
+        p.app_id, p.secret_key = "app1", "s3cret"
+        p.save()
+        seen = []
+
+        def fake(provider, method, url, data=None, **kw):
+            seen.append((url, dict(data)))
+            return self.Resp({"code": 200})
+        with use_tenant(None) if False else mock.patch("gaming.providers.fastapi.http", fake):
+            class L:  # a player login
+                platform_user_id, username, password = "bob1", "bob1", "old"
+            res = FastApiAdapter(p).reset_password(L, "NewPass1")
+        self.assertTrue(res.ok)
+        self.assertTrue(seen[0][0].endswith("/fast/user/resetPasswd"))
+        self.assertEqual((seen[0][1]["account"], seen[0][1]["new_passwd"]), ("bob1", "NewPass1"))
+        self.assertNotIn("passwd", seen[0][1])

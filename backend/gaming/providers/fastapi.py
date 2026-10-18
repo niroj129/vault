@@ -68,10 +68,15 @@ class FastApiAdapter(Adapter):
         if hit:
             return hit
         self.require("base_url", "agent_name", "agent_password")
-        params = {"requestid": uuid.uuid4().hex, "timestamp": now_ms(),
-                  "account": self.p.agent_name, "passwd": self.p.agent_password}
-        params["sign"] = sign(params, self.p.agent_password)
-        data = json_of(http(self.p, "POST", f"{self.base}/fast/agent/login", data=params))
+        # the document signs the agent login WITHOUT an appsecret on the end; older platforms
+        # appended the agent password instead, so fall back to that only on "invalid signature"
+        for secret in ("", self.p.agent_password):
+            params = {"requestid": uuid.uuid4().hex, "timestamp": now_ms(),
+                      "account": self.p.agent_name, "passwd": self.p.agent_password}
+            params["sign"] = sign(params, secret)
+            data = json_of(http(self.p, "POST", f"{self.base}/fast/agent/login", data=params))
+            if data.get("code") != 4:
+                break
         d = data.get("data") or {}
         if data.get("code") != 200 or not d.get("appsecret_encrypted"):
             raise ApiError("Agent login failed: " + CODES.get(
@@ -138,6 +143,6 @@ class FastApiAdapter(Adapter):
         return Result(ok=True, message="OK", balance=cache.get(f"gp:fastapi:{self.p.pk}:bal"))
 
     def reset_password(self, login, new_password):
-        return self.result(self.call("/fast/user/updatePasswd", {
-            "account": self.short(login), "passwd": login.password,
-            "new_passwd": new_password}))
+        # the agent-side reset: no need to know the player's old password
+        return self.result(self.call("/fast/user/resetPasswd", {
+            "account": self.short(login), "new_passwd": new_password}))
