@@ -16,10 +16,10 @@ import type { Deposit, DirectMethod, PlayGame } from "@/lib/types";
 import { PayTo } from "./pay-to";
 import { ProofPicker } from "./proof-picker";
 
-interface Props { open: boolean; onOpenChange: (o: boolean) => void; method: DirectMethod; amount: string; game: PlayGame; gameUser: string; onSent: (ref: string) => void }
+interface Props { open: boolean; onOpenChange: (o: boolean) => void; method: DirectMethod; amount: string; game: PlayGame; gameUser: string; promoCode?: string; onSent: (ref: string) => void }
 
 /** Pay our own QR: scan or send, add a screenshot, tap "I've paid". Radix Dialog traps and restores focus. */
-export function DirectPayDialog({ open, onOpenChange, method, amount, game, gameUser, onSent }: Props) {
+export function DirectPayDialog({ open, onOpenChange, method, amount, game, gameUser, promoCode, onSent }: Props) {
   const { token, user } = useAuth();
   const needProof = method.proof === "required";
   const schema = z.object({
@@ -34,6 +34,7 @@ export function DirectPayDialog({ open, onOpenChange, method, amount, game, game
     const fd = new FormData();
     fd.append("pay_method", String(method.id)); fd.append("amount", amount); fd.append("game", String(game.id));
     if (gameUser) fd.append("game_username", gameUser);
+    if (promoCode) fd.append("promo_code", promoCode);
     if (v.player_note) fd.append("player_note", v.player_note);
     if (v.proof) fd.append("proof", v.proof);
     try { const d = await apiFetch<Deposit>("/play/deposits/", { method: "POST", token, body: fd }); onSent(d.reference); }

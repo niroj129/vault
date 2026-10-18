@@ -106,7 +106,8 @@ def deposit_dict(d, staff=False):
         "pay_to": ({"handle": d.pay_method.handle, "account_name": d.pay_method.account_name,
                     "qr": media(d.pay_method.qr)} if direct and d.pay_method_id and d.pay_method else None),
         "amount": d.amount, "fee_amount": d.fee_amount,
-        "credit_amount": d.credit_amount, "status": d.status,
+        "credit_amount": d.credit_amount, "promo_code": d.promo_code,
+        "bonus_amount": d.bonus_amount, "status": d.status,
         "status_label": label, "load_status": d.load_status,
         "load_label": d.get_load_status_display(),
         "checkout_url": d.checkout_url, "tag": d.tag, "tag_email": d.tag_email,
@@ -244,6 +245,39 @@ def my_balance(request, login_id):
     return Response({"balance": res.balance, "live": True, "play_url": res.play_url})
 
 
+def _promo_for(request, user, amount, lock=False):
+    """The (promo, bonus) a deposit asked for with promo_code, or (None, 0).
+    A code that doesn't work is an error the player sees, never silently dropped."""
+    code = (request.data.get("promo_code") or "").strip()
+    if not code:
+        return None, Decimal("0"), None
+    try:
+        promo, bonus = service.promo_quote(user, code, amount, lock=lock)
+    except service.PromoError as e:
+        return None, Decimal("0"), bad(str(e))
+    return promo, bonus, None
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def promo_check(request):
+    """Preview a promo code against a deposit amount (nothing is saved)."""
+    if not PayThrottle().allow_request(request, None):
+        return bad("Too many tries — wait a minute.", 429)
+    try:
+        amount = Decimal(str(request.data.get("amount")))
+        assert amount > 0
+    except Exception:
+        return bad("Pick an amount first, then apply the code.")
+    try:
+        promo, bonus = service.promo_quote(request.user, request.data.get("code"), amount)
+    except service.PromoError as e:
+        return bad(str(e))
+    credits = service.credit_for(amount, 0) + bonus
+    return Response({"valid": True, "code": promo.code.upper(), "title": promo.title,
+                     "bonus": bonus, "credits": credits, "usage": promo.usage})
+
+
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
 def my_deposits(request):
@@ -281,9 +315,15 @@ def start_deposit(request):
     if open_dep and open_dep.checkout_url and request.data.get("replace") not in (True, "true", "1"):
         return Response(dict(deposit_dict(open_dep), reused=True))
     login = _player_login(request, game)
-    dep = Deposit.objects.create(user=request.user, game=game, method=method,
-                                 amount=amount, credit_amount=service.credit_for(amount, 0, s),
-                                 login=login, bp_account=bytepayout.credentials(s)[3])
+    with transaction.atomic():
+        promo, bonus, err = _promo_for(request, request.user, amount, lock=True)
+        if err:
+            return err
+        dep = Deposit.objects.create(user=request.user, game=game, method=method,
+                                     amount=amount, credit_amount=service.credit_for(amount, 0, s) + bonus,
+                                     login=login, bp_account=bytepayout.credentials(s)[3],
+                                     promo=promo, promo_code=promo.code.upper() if promo else "",
+                                     bonus_amount=bonus)
     dep.reference = f"{getattr(request, 'tenant', None) and request.tenant.slug or 'site'}-{dep.reference}"[:64]
     dep.save(update_fields=["reference"])
     return_url = request.data.get("return_url") or ""
@@ -342,10 +382,15 @@ def start_direct_deposit(request):
     if waiting >= 3:
         return bad("You already have payments we're checking — give us a minute.")
     login = _player_login(request, game)
-    dep = Deposit.objects.create(
-        user=request.user, game=game, method=m.key, pay_method=m, amount=amount,
-        credit_amount=service.credit_for(amount, 0), login=login, gateway="direct",
-        proof=proof, player_note=(request.data.get("player_note") or "").strip()[:200])
+    with transaction.atomic():
+        promo, bonus, err = _promo_for(request, request.user, amount, lock=True)
+        if err:
+            return err
+        dep = Deposit.objects.create(
+            user=request.user, game=game, method=m.key, pay_method=m, amount=amount,
+            credit_amount=service.credit_for(amount, 0) + bonus, login=login, gateway="direct",
+            proof=proof, player_note=(request.data.get("player_note") or "").strip()[:200],
+            promo=promo, promo_code=promo.code.upper() if promo else "", bonus_amount=bonus)
     dep.reference = f"{getattr(request, 'tenant', None) and request.tenant.slug or 'site'}-{dep.reference}"[:64]
     dep.save(update_fields=["reference"])
     service.on_commit_here(service.direct_submitted, Deposit.objects.select_related(
@@ -642,9 +687,14 @@ def record_payment(request):
     proof, err = _proof(request)
     if err:
         return err
-    dep = Deposit.objects.create(
+    with transaction.atomic():
+        promo, bonus, err = _promo_for(request, user, amount, lock=True)
+        if err:
+            return err
+        dep = Deposit.objects.create(
         user=user, game=game, method=(request.data.get("method") or "cash")[:20],
-        amount=amount, credit_amount=amount, gateway="manual", proof=proof,
+        amount=amount, credit_amount=amount + bonus, gateway="manual", proof=proof,
+        promo=promo, promo_code=promo.code.upper() if promo else "", bonus_amount=bonus,
         status=Deposit.Status.APPROVED, approved_at=timezone.now(),
         load_status=Deposit.Load.QUEUED if service.is_automated(game) else Deposit.Load.MANUAL,
         created_by=request.user, note=(request.data.get("note") or "")[:200])

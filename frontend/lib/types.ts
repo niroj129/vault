@@ -110,7 +110,12 @@ export interface BusinessInfo {
 }
 
 export interface Winner { id: number; name: string; amount: Money; game: string; photo: string | null; win_date: string }
-export interface Promo { id: number; title: string; code: string; description: string; image: string | null; active: boolean; expires: string | null }
+export interface Promo {
+  id: number; title: string; code: string; description: string; image: string | null; active: boolean; starts: string | null; expires: string | null;
+  bonus_percent: Money; bonus_flat: Money; max_bonus: Money; min_deposit: Money; usage: "once" | "recurring"; max_uses: number; used: number;
+}
+/** A promo code checked against a deposit amount (POST /play/promo/check/). */
+export interface PromoQuote { valid: true; code: string; title: string; bonus: Money; credits: Money; usage: "once" | "recurring" }
 export interface SiteFAQ { id: number; question: string; answer: string; category: string }
 export interface Announcement { id: number; title: string; body: string; pinned: boolean; active: boolean }
 export interface Notification { id: number; text: string; link: string; is_read: boolean; created_at: string }
@@ -161,7 +166,7 @@ export interface Deposit {
   id: number; reference: string; code: string; method: string; method_label: string;
   direct: boolean; proof: string | null; player_note: string; reason: string;
   pay_to: { handle: string; account_name: string; qr: string | null } | null;
-  amount: Money; fee_amount: Money; credit_amount: Money;
+  amount: Money; fee_amount: Money; credit_amount: Money; promo_code: string; bonus_amount: Money;
   status: DepositStatus; status_label: string; load_status: LoadStatus; load_label: string;
   checkout_url: string; tag: string; tag_email: string; expires_at: string | null;
   created_at: string; approved_at: string | null; loaded_at: string | null; loaded_amount: Money | null;

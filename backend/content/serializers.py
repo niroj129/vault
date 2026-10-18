@@ -97,11 +97,39 @@ class NotificationSerializer(serializers.ModelSerializer):
 
 class PromoSerializer(serializers.ModelSerializer):
     image = RelativeImageField(required=False, allow_null=True)
+    # how many deposits have claimed the code (paid or waiting)
+    used = serializers.SerializerMethodField()
 
     class Meta:
         model = Promo
         fields = ["id", "title", "code", "description", "image", "active",
-                  "expires", "sort_order"]
+                  "starts", "expires", "sort_order", "bonus_percent", "bonus_flat",
+                  "max_bonus", "min_deposit", "usage", "max_uses", "used"]
+
+    def get_used(self, obj):
+        from gaming.service import _promo_holds
+        return _promo_holds(obj).count()
+
+    def validate_code(self, value):
+        value = (value or "").strip().upper().replace(" ", "")
+        if value:
+            clash = Promo.objects.filter(code__iexact=value)
+            if self.instance:
+                clash = clash.exclude(pk=self.instance.pk)
+            if clash.exists():
+                raise serializers.ValidationError("Another promotion already uses that code.")
+        return value
+
+    def validate(self, attrs):
+        get = lambda k, d=0: attrs.get(k, getattr(self.instance, k, d))  # noqa: E731
+        for k in ("bonus_percent", "bonus_flat", "max_bonus", "min_deposit"):
+            if get(k) < 0:
+                raise serializers.ValidationError({k: "Can't be negative."})
+        if (get("bonus_percent") > 0 or get("bonus_flat") > 0) and not get("code", ""):
+            raise serializers.ValidationError({"code": "Add a code for players to enter."})
+        if get("starts", None) and get("expires", None) and get("starts") > get("expires"):
+            raise serializers.ValidationError({"expires": "Ends before it starts."})
+        return attrs
 
 
 class SiteFAQSerializer(serializers.ModelSerializer):

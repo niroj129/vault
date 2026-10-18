@@ -14,6 +14,7 @@ twice, even if the webhook and a status check arrive together.
 import logging
 import threading
 import time
+from datetime import timedelta
 from decimal import Decimal
 
 from django.db import transaction
@@ -158,6 +159,56 @@ def credit_for(amount, fee, settings=None):
     return max(credit.quantize(Decimal("0.01")), Decimal("0"))
 
 
+class PromoError(Exception):
+    """A promo code the player can't use (the text is shown to them)."""
+
+
+def _promo_holds(promo):
+    """Deposits that count against a code: paid ones, and ones still waiting to be
+    paid (so two open checkouts can't both claim a one-time code)."""
+    from django.db.models import Q
+    recent = timezone.now() - timedelta(hours=3)
+    return Deposit.objects.filter(promo=promo).filter(
+        Q(status=Deposit.Status.APPROVED)
+        | Q(status=Deposit.Status.PENDING, gateway="direct")
+        | Q(status=Deposit.Status.PENDING, created_at__gte=recent))
+
+
+def promo_quote(user, code, amount, lock=False):
+    """Check a promo code for this player and deposit. Returns (promo, bonus).
+    Raises PromoError with a message fit to show the player. With lock=True the
+    promo row is locked (call inside transaction.atomic) so concurrent deposits
+    can't both use a one-time code."""
+    from content.models import Promo
+    code = (code or "").strip()
+    if not code:
+        raise PromoError("Enter a promo code.")
+    qs = Promo.objects.filter(code__iexact=code, active=True)
+    promo = (qs.select_for_update() if lock else qs).first()
+    if not promo:
+        raise PromoError("That promo code isn't valid.")
+    today = timezone.localdate()
+    if promo.starts and promo.starts > today:
+        raise PromoError(f"That code starts on {promo.starts:%b %d}.")
+    if promo.expires and promo.expires < today:
+        raise PromoError("That code has expired.")
+    pct, flat = Decimal(promo.bonus_percent or 0), Decimal(promo.bonus_flat or 0)
+    if pct <= 0 and flat <= 0:
+        raise PromoError("That code can't be applied at checkout — ask your agent about it.")
+    amount = Decimal(str(amount))
+    if promo.min_deposit and amount < promo.min_deposit:
+        raise PromoError(f"That code needs a deposit of at least ${promo.min_deposit:g}.")
+    holds = _promo_holds(promo)
+    if promo.usage == promo.Usage.ONCE and holds.filter(user=user).exists():
+        raise PromoError("You've already used that code.")
+    if promo.max_uses and holds.count() >= promo.max_uses:
+        raise PromoError("That code has been fully claimed.")
+    bonus = amount * pct / 100 + flat
+    if promo.max_bonus and bonus > promo.max_bonus:
+        bonus = Decimal(promo.max_bonus)
+    return promo, bonus.quantize(Decimal("0.01"))
+
+
 def apply_gateway(dep, data):
     """Copy gateway fields onto the deposit (no status change)."""
     if not isinstance(data, dict):
@@ -190,7 +241,7 @@ def set_status(dep_id, status, data=None):
             dep.status = status
             if status == Deposit.Status.APPROVED:
                 dep.approved_at = timezone.now()
-                dep.credit_amount = credit_for(dep.amount, dep.fee_amount)
+                dep.credit_amount = credit_for(dep.amount, dep.fee_amount) + (dep.bonus_amount or 0)
                 s = SiteSettings.load()
                 if dep.game and is_automated(dep.game) and s.auto_load:
                     dep.load_status = Deposit.Load.QUEUED

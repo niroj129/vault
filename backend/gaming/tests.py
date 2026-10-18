@@ -535,3 +535,107 @@ class CashoutRuleTests(ManualFlowTests):
         r = self.admin_c.put("/api/settings/", {"cashout_min_x": "5", "cashout_max_x": "4"}, format="json")
         self.assertEqual(r.status_code, 400)
         self.assertIn("cashout_max_x", r.data)
+
+
+@override_settings(GAMING_SYNC_LOADS=True)
+@mock.patch("gaming.service.adapter_for", FakeAdapter)
+class PromoCodeTests(TestCase):
+    """Promo codes entered while loading: bonus maths, one-time vs recurring, limits."""
+    start = DepositFlowTests.start
+    webhook = DepositFlowTests.webhook
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()  # the payment throttle counts per minute across tests
+        DepositFlowTests.setUp(self)
+
+    def promo(self, tenant=None, **kw):
+        from content.models import Promo
+        with use_tenant(tenant or self.a):
+            return Promo.objects.create(**{"title": "Boost", "code": "BOOST", "bonus_percent": 20, **kw})
+
+    def test_bonus_is_percent_plus_flat_and_loads_with_the_payment(self):
+        self.promo(bonus_flat=5)
+        r = self.start(promo_code="boost")
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.data["promo_code"], "BOOST")
+        self.assertEqual(Decimal(str(r.data["bonus_amount"])), Decimal("15.00"))  # 20% of 50 + 5
+        self.assertEqual(Decimal(str(r.data["credit_amount"])), Decimal("65.00"))
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(self.webhook(r.data["reference"]).status_code, 200)
+        dep = Deposit.all_tenants.get(reference=r.data["reference"])
+        self.assertEqual(dep.credit_amount, Decimal("65.00"))
+        loads = [c for c in FakeAdapter.calls if c[0] == "load"]
+        self.assertEqual(loads[0][2], "65.00")
+
+    def test_max_bonus_caps_it(self):
+        self.promo(bonus_percent=100, max_bonus=10)
+        r = self.start(promo_code="BOOST")
+        self.assertEqual(Decimal(str(r.data["bonus_amount"])), Decimal("10.00"))
+
+    def test_one_time_code_cannot_be_used_twice(self):
+        self.promo()
+        self.assertEqual(self.start(promo_code="BOOST").status_code, 201)
+        again = self.start(promo_code="BOOST", replace=True)
+        self.assertEqual(again.status_code, 400)
+        self.assertIn("already used", again.data["detail"])
+
+    def test_recurring_code_works_every_time(self):
+        self.promo(usage="recurring")
+        self.assertEqual(self.start(promo_code="BOOST").status_code, 201)
+        self.assertEqual(self.start(promo_code="BOOST", replace=True).status_code, 201)
+
+    def test_unpaid_deposit_that_expires_frees_a_one_time_code(self):
+        self.promo()
+        r = self.start(promo_code="BOOST")
+        self.webhook(r.data["reference"], status="expired")
+        self.assertEqual(self.start(promo_code="BOOST", replace=True).status_code, 201)
+
+    def test_bad_codes_are_refused_and_create_nothing(self):
+        from datetime import date, timedelta
+        self.promo(code="OLD", expires=date.today() - timedelta(days=1))
+        self.promo(code="SOON", starts=date.today() + timedelta(days=2))
+        self.promo(code="BIG", min_deposit=100)
+        self.promo(code="OFF", active=False)
+        self.promo(code="SHOW", bonus_percent=0)  # display-only offer
+        self.promo(tenant=self.b, code="THEIRS")
+        for code in ("OLD", "SOON", "BIG", "OFF", "SHOW", "THEIRS", "NOPE"):
+            r = self.start(promo_code=code)
+            self.assertEqual(r.status_code, 400, (code, r.content))
+        self.assertEqual(Deposit.all_tenants.count(), 0)
+
+    def test_total_use_limit(self):
+        self.promo(code="TEN", usage="recurring", max_uses=1)
+        self.assertEqual(self.start(promo_code="TEN").status_code, 201)
+        r = self.start(promo_code="TEN", replace=True)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("fully claimed", r.data["detail"])
+
+    def test_check_previews_without_saving(self):
+        self.promo(bonus_flat=5)
+        r = self.ann_c.post("/api/play/promo/check/", {"code": "boost", "amount": 50}, format="json")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(Decimal(str(r.data["bonus"])), Decimal("15.00"))
+        self.assertEqual(Decimal(str(r.data["credits"])), Decimal("65.00"))
+        self.assertEqual(Deposit.all_tenants.count(), 0)
+        bad = self.ann_c.post("/api/play/promo/check/", {"code": "zzz", "amount": 50}, format="json")
+        self.assertEqual(bad.status_code, 400)
+
+    def test_staff_can_add_a_code_when_recording_a_payment(self):
+        self.promo(code="CASH", bonus_percent=10)
+        c = client_for(A, "admin")
+        r = c.post("/api/admin/deposits/", {"user": self.ann.id, "game": self.game.id, "amount": 100,
+                                            "promo_code": "cash"}, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(Decimal(str(r.data["credit_amount"])), Decimal("110.00"))
+
+    def test_admin_code_must_be_unique_and_have_a_code_if_it_gives_a_bonus(self):
+        self.promo()
+        c = client_for(A, "admin")
+        dup = c.post("/api/promos/", {"title": "Dup", "code": "boost", "bonus_percent": 5}, format="json")
+        self.assertEqual(dup.status_code, 400)
+        nocode = c.post("/api/promos/", {"title": "X", "bonus_percent": 5}, format="json")
+        self.assertEqual(nocode.status_code, 400)
+        ok = c.post("/api/promos/", {"title": "New", "code": "new 10", "bonus_percent": 10}, format="json")
+        self.assertEqual(ok.status_code, 201, ok.content)
+        self.assertEqual(ok.data["code"], "NEW10")

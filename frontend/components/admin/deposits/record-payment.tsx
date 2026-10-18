@@ -10,7 +10,7 @@ import { UserAvatar } from "@/components/common/user-avatar";
 import { ProofPicker } from "@/components/play/proof-picker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Field, FieldError, FieldGroup, FieldLabel, FieldTitle } from "@/components/ui/field";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldTitle } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -23,6 +23,7 @@ const schema = z.object({
   amount: z.string().refine((v) => Number(v) > 0, "Enter an amount above 0."),
   method: z.string().trim().min(1, "How did they pay?").max(20),
   note: z.string().max(200).optional(),
+  promo_code: z.string().trim().max(40).optional(),
   proof: z.instanceof(File).nullable(),
 });
 type Values = z.infer<typeof schema>;
@@ -34,7 +35,7 @@ export function RecordPayment({ onClose, onDone }: { onClose: () => void; onDone
   const [people, setPeople] = useState<AdminUser[]>([]);
   const [player, setPlayer] = useState<AdminUser | null>(null);
   const [games, setGames] = useState<Game[]>([]);
-  const form = useForm<Values>({ resolver: zodResolver(schema), defaultValues: { game: "", amount: "", method: "cash", note: "", proof: null } });
+  const form = useForm<Values>({ resolver: zodResolver(schema), defaultValues: { game: "", amount: "", method: "cash", note: "", promo_code: "", proof: null } });
   useEffect(() => { apiFetch<Game[]>("/games/", { token }).then(setGames).catch(() => {}); }, [token]);
   useEffect(() => {
     const t = setTimeout(() => apiFetch<AdminUser[]>("/users/?role=user", { token })
@@ -45,7 +46,7 @@ export function RecordPayment({ onClose, onDone }: { onClose: () => void; onDone
   async function save(v: Values) {
     if (!player) return;
     const fd = new FormData();
-    fd.append("user", String(player.id)); fd.append("game", v.game); fd.append("amount", v.amount); fd.append("method", v.method); fd.append("note", v.note || "");
+    fd.append("user", String(player.id)); fd.append("game", v.game); fd.append("amount", v.amount); fd.append("method", v.method); fd.append("note", v.note || ""); if (v.promo_code) fd.append("promo_code", v.promo_code);
     if (v.proof) fd.append("proof", v.proof);
     try { await apiFetch("/admin/deposits/", { method: "POST", token, body: fd }); toast.success(`Recorded for @${player.username}`); onDone(); }
     catch (e) { form.setError("root", { message: errorText(e) }); }
@@ -81,6 +82,9 @@ export function RecordPayment({ onClose, onDone }: { onClose: () => void; onDone
                   <Input id="rp-amount" type="number" inputMode="decimal" min="0" step="0.01" aria-invalid={!!errors.amount} {...form.register("amount")} /><FieldError>{errors.amount?.message}</FieldError></Field>
                 <Field data-invalid={!!errors.method}><FieldLabel htmlFor="rp-method">Paid with</FieldLabel><Input id="rp-method" {...form.register("method")} /><FieldError>{errors.method?.message}</FieldError></Field>
                 <Field><FieldLabel htmlFor="rp-note">Note <span className="font-normal text-muted-foreground">(optional)</span></FieldLabel><Input id="rp-note" {...form.register("note")} /></Field>
+                <Field className="sm:col-span-2"><FieldLabel htmlFor="rp-promo">Promo code <span className="font-normal text-muted-foreground">(optional)</span></FieldLabel>
+                  <Input id="rp-promo" autoComplete="off" autoCapitalize="characters" className="font-mono uppercase" {...form.register("promo_code")} />
+                  <FieldDescription>Adds the code&apos;s bonus credits to this load, if the player can still use it.</FieldDescription></Field>
               </div>
               <Controller control={form.control} name="proof" render={({ field }) => (
                 <Field><FieldTitle>Payment screenshot <span className="font-normal text-muted-foreground">(optional)</span></FieldTitle>

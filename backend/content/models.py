@@ -287,8 +287,31 @@ class Notification(TenantModel):
 
 
 class Promo(TenantModel):
+    class Usage(models.TextChoices):
+        ONCE = "once", "One-time (each player can use it once)"
+        RECURRING = "recurring", "Recurring (players can use it on every load)"
+
     title = models.CharField(max_length=150)
     code = models.CharField(max_length=40, blank=True)
+    # what the code gives when a player enters it while loading (all optional;
+    # a code with no bonus is just a display offer that staff handle by hand)
+    bonus_percent = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0,
+        help_text="Extra credits as a % of the deposit, e.g. 50 = +50%")
+    bonus_flat = models.DecimalField(
+        max_digits=8, decimal_places=2, default=0,
+        help_text="Extra credits as a fixed amount, e.g. 5 = +$5")
+    max_bonus = models.DecimalField(
+        max_digits=8, decimal_places=2, default=0,
+        help_text="Most bonus credits one deposit can earn (0 = no limit)")
+    min_deposit = models.DecimalField(
+        max_digits=8, decimal_places=2, default=0,
+        help_text="Smallest deposit that qualifies (0 = any)")
+    usage = models.CharField(max_length=10, choices=Usage.choices,
+                             default=Usage.ONCE)
+    max_uses = models.PositiveIntegerField(
+        default=0, help_text="Total uses across all players (0 = unlimited)")
+    starts = models.DateField(null=True, blank=True)
     description = models.TextField(blank=True)
     image = models.ImageField(upload_to="promos/", blank=True, null=True)
     active = models.BooleanField(default=True)

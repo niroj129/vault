@@ -28,6 +28,7 @@ export function WalletPage() {
   const ref = params.get("ref");
   const tab = TABS.some(([k]) => k === params.get("tab")) ? params.get("tab")! : "load";
   const preselect = Number(params.get("game")) || null;
+  const promoParam = (params.get("promo") || "").slice(0, 40);
   const [opts, setOpts] = useState<PlayOptions | null>(null);
   const [error, setError] = useState("");
   const loadOpts = useCallback(() => { apiFetch<PlayOptions>("/play/options/", { token }).then(setOpts).catch((e) => setError(errorText(e))); }, [token]);
@@ -47,7 +48,7 @@ export function WalletPage() {
           {!opts ? <Skeleton className="h-96 rounded-xl" /> : (
             <>
               <TabsContent value="load">
-                {opts.payments_on ? <LoadForm opts={opts} preselect={preselect} onStarted={(r) => go(`ref=${r}`)} /> : (
+                {opts.payments_on ? <LoadForm opts={opts} preselect={preselect} initialPromo={promoParam} onStarted={(r) => go(`ref=${r}`)} /> : (
                   <Empty className="border"><EmptyHeader><EmptyMedia variant="icon"><Wallet aria-hidden /></EmptyMedia><EmptyTitle>Online payments aren&apos;t on yet</EmptyTitle>
                     <EmptyDescription>Message support and an agent will load your game.</EmptyDescription></EmptyHeader>
                     <EmptyContent><Button asChild><Link href="/messages?c=support"><MessageCircle aria-hidden />Message support</Link></Button></EmptyContent></Empty>

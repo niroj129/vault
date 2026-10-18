@@ -1,4 +1,4 @@
-import { Clock, Gift, MessageCircle } from "lucide-react";
+import { Clock, Gift, MessageCircle, Wallet } from "lucide-react";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -15,11 +15,20 @@ import type { Promo } from "@/lib/types";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Promotions & Bonuses", description: "Current promotions, bonus codes and cashback offers for Juwa, Game Vault, Orion Stars and more." };
 
+const hasBonus = (p: Promo) => !!p.code && (Number(p.bonus_percent) > 0 || Number(p.bonus_flat) > 0);
+
+/** "+50% bonus (up to $25) · min $20 · one-time" */
+function terms(p: Promo) {
+  const give = [Number(p.bonus_percent) > 0 && `${Number(p.bonus_percent)}%`, Number(p.bonus_flat) > 0 && `$${Number(p.bonus_flat)}`].filter(Boolean).join(" + ");
+  return [`+${give} bonus${Number(p.max_bonus) > 0 ? ` (up to $${Number(p.max_bonus)})` : ""}`,
+    Number(p.min_deposit) > 0 && `min $${Number(p.min_deposit)} load`, p.usage === "once" ? "one-time per player" : "use it on every load"].filter(Boolean).join(" · ");
+}
+
 export default async function Promotions() {
   const promos = (await getJSONSafe<Promo[]>("/promos/", [])).filter((p) => p.active !== false);
   return (
     <div className="grid gap-8">
-      <PageHeader eyebrow="Offers" title="Promotions" description="Share the code with your agent when you load and the bonus is added to your balance." />
+      <PageHeader eyebrow="Offers" title="Promotions" description="Enter a promo code on the Load page when you pay and the bonus credits are added to your load automatically." />
       {promos.length ? (
         <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {promos.map((p) => (
@@ -33,7 +42,12 @@ export default async function Promotions() {
                 <CardContent className="flex-1">{p.description && <p className="max-w-prose text-foreground/85">{p.description}</p>}</CardContent>
                 <CardFooter className="flex flex-wrap items-center gap-2">
                   {p.code && <CopyCode code={p.code} />}
-                  <Button asChild><Link href="/messages?c=support"><MessageCircle aria-hidden />Claim with an agent</Link></Button>
+                  {hasBonus(p) ? (
+                    <Button asChild><Link href={`/load?promo=${encodeURIComponent(p.code)}`}><Wallet aria-hidden />Use at checkout</Link></Button>
+                  ) : (
+                    <Button asChild><Link href="/messages?c=support"><MessageCircle aria-hidden />Claim with an agent</Link></Button>
+                  )}
+                  {hasBonus(p) && <p className="w-full text-sm text-muted-foreground">{terms(p)}</p>}
                   {p.expires && <p className="flex w-full items-center gap-1.5 pt-1 text-sm text-muted-foreground"><Clock className="size-4" aria-hidden />Ends {shortDate(p.expires)}</p>}
                 </CardFooter>
               </Card>

@@ -165,6 +165,12 @@ class Deposit(TenantModel):
     credit_amount = models.DecimalField(
         max_digits=10, decimal_places=2, default=0,
         help_text="Credits to load into the game")
+    promo = models.ForeignKey("content.Promo", null=True, blank=True,
+                              on_delete=models.SET_NULL, related_name="deposits")
+    promo_code = models.CharField(max_length=40, blank=True)
+    bonus_amount = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+        help_text="Promo-code credits included in credit_amount")
     status = models.CharField(max_length=10, choices=Status.choices,
                               default=Status.PENDING, db_index=True)
     reference = models.CharField(max_length=64, unique=True,

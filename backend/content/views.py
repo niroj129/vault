@@ -448,6 +448,9 @@ def promo_redeem(request):
     promo = Promo.objects.filter(code__iexact=code, active=True).first()
     if not promo:
         return Response({"detail": "Invalid or expired code."}, status=400)
+    if promo.bonus_percent or promo.bonus_flat:
+        # codes with a bonus are entered when loading and applied automatically
+        return Response({"ok": True, "title": promo.title, "apply_at_load": True})
     Notification.objects.create(
         user=request.user, text=f"🎁 Code {promo.code} accepted — an agent will "
         f"apply your bonus.", link="/dashboard")

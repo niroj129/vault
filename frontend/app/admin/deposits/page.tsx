@@ -152,7 +152,8 @@ export default function DepositsPage() {
                         {d.login ? <div className="mt-1 flex w-fit items-center rounded-md bg-muted pl-2"><code className="font-mono text-sm">{d.login}</code><CopyButton value={d.login} label="game username" size="icon-xs" /></div>
                           : d.status === "approved" && <p className="mt-1 text-sm text-destructive-text">No username — create one and message the player</p>}</TableCell>
                       <TableCell className="text-right"><b className="tabular-nums">{money(d.amount)}</b>
-                        {Number(d.credit_amount) > 0 && Number(d.credit_amount) !== Number(d.amount) && <div className="text-sm text-muted-foreground tabular-nums">loads {money(d.credit_amount)}</div>}</TableCell>
+                        {Number(d.credit_amount) > 0 && Number(d.credit_amount) !== Number(d.amount) && <div className="text-sm text-muted-foreground tabular-nums">loads {money(d.credit_amount)}</div>}
+                        {d.promo_code && <Badge variant="secondary" className="mt-1 font-mono">{d.promo_code} +{money(d.bonus_amount)}</Badge>}</TableCell>
                       <TableCell><div className="flex items-center gap-2">
                         {d.proof && <button type="button" onClick={() => setZoom(d.proof)} aria-label={`View @${d.user.username}'s screenshot`} className="relative h-11 w-8 shrink-0 overflow-hidden rounded border pointer-coarse:w-11">
                           <Image src={mediaUrl(d.proof)} alt="" fill sizes="32px" className="object-cover" /></button>}

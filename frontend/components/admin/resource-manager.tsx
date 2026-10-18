@@ -119,7 +119,7 @@ export function ResourceForm({ fields, initial, editing, onSubmit, submitLabel, 
                     </Select>
                   )} />
                 ) : f.type === "image" ? <ImageField id={id} value={initial[f.name] as string | null} file={files[f.name]} onFile={(x) => setFiles((s) => ({ ...s, [f.name]: x }))} />
-                : <Input id={id} type={f.type === "number" ? "number" : f.type || "text"} inputMode={f.type === "number" ? "decimal" : undefined}
+                : <Input id={id} type={f.type === "number" ? "number" : f.type || "text"} inputMode={f.type === "number" ? "decimal" : undefined} step={f.type === "number" ? "any" : undefined}
                     autoComplete={f.type === "password" ? "new-password" : "off"} placeholder={f.placeholder} aria-invalid={!!err(f.name)} {...form.register(f.name)} />}
               {f.help && <FieldDescription>{f.help}</FieldDescription>}
               <FieldError>{err(f.name)}</FieldError>

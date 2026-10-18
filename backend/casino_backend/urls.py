@@ -130,6 +130,7 @@ api = [
     path("play/options/", gaming.play_options),
     path("play/accounts/", gaming.create_my_account),
     path("play/accounts/<int:login_id>/balance/", gaming.my_balance),
+    path("play/promo/check/", gaming.promo_check),
     path("play/deposits/", gaming.my_deposits),
     path("play/deposits/<str:ref>/", gaming.my_deposit),
     path("play/redeems/", gaming.my_redeems),

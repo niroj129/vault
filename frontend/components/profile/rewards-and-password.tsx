@@ -22,8 +22,10 @@ export function RewardsCard() {
   const refLink = `${typeof window !== "undefined" ? window.location.origin : ""}/?ref=${user?.referral_code || ""}`;
   async function submit(v: z.infer<typeof codeSchema>) {
     try {
-      const r = await apiFetch<{ title: string }>("/promos/redeem/", { method: "POST", token, body: v });
-      toast.success(`${r.title} — staff will apply your bonus.`); form.reset();
+      const r = await apiFetch<{ title: string; apply_at_load?: boolean }>("/promos/redeem/", { method: "POST", token, body: v });
+      if (r.apply_at_load) toast.success(`${r.title} — enter this code on the Load page when you pay and the bonus is added automatically.`, { action: { label: "Load now", onClick: () => { window.location.href = `/load?promo=${encodeURIComponent(v.code.trim())}`; } } });
+      else toast.success(`${r.title} — staff will apply your bonus.`);
+      form.reset();
     } catch (e) { form.setError("code", { message: errorText(e) || "That code isn't valid." }); }
   }
   const { errors, isSubmitting } = form.formState;
