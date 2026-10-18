@@ -190,7 +190,7 @@ def read_payment(subject, text):
         m = p.search(blob)
         if not m:
             continue
-        name = re.split(r"[.!?:]\s+", m.group("name"))[-1]  # never cross a sentence break
+        name = re.split(r"(?<=[A-Za-z]{2})[.!?:]\s+|(?<=\d)[.!?:]\s+", m.group("name"))[-1]  # never cross a sentence break (but "Marlette A." is a name)
         name = re.sub(r"\s+(on|via|with|using|to|for)$", "", name.strip(" .,:;"), flags=re.I)
         if name.lower() in NOT_NAMES:
             continue

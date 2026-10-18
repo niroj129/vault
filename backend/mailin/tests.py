@@ -60,7 +60,7 @@ class ParseTests(TestCase):
         self.assertNotIn("http", mail["text"]); self.assertNotIn("[image", mail["text"]); self.assertNotIn("*", mail["text"])
         self.assertEqual(mail["from_email"], "alerts@account.chime.com")  # the original sender, from the "wrote:" line
         amount, payer, _note = parse.read_payment(mail["subject"], mail["text"])
-        self.assertEqual((str(amount), payer), ("7.00", "Marlette A"))
+        self.assertEqual((str(amount), payer), ("7.00", "Marlette A."))
         self.assertEqual(parse.app_of(mail["from_email"], mail["subject"], mail["text"]), "chime")
 
     def test_gmail_forwarded_message_block_and_no_spoofing_of_normal_senders(self):
