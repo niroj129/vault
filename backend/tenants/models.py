@@ -1,4 +1,5 @@
 from django.contrib.auth.models import UserManager
+from django.core.cache import cache
 from django.db import models
 
 from .context import get_current_tenant
@@ -61,6 +62,11 @@ class Domain(models.Model):
     def save(self, *args, **kwargs):
         self.host = self.host.strip().lower().split(":")[0]
         super().save(*args, **kwargs)
+        cache.delete(f"tenant-host:{self.host}")
+
+    def delete(self, *args, **kwargs):
+        cache.delete(f"tenant-host:{self.host}")
+        return super().delete(*args, **kwargs)
 
     def __str__(self):
         return self.host

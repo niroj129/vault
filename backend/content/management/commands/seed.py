@@ -7,9 +7,12 @@ Idempotent: safe to run multiple times.
 
 import io
 import math
+import os
 import random
+import secrets
 from datetime import date, timedelta
 
+from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand, CommandError
 from PIL import Image, ImageDraw, ImageFont
@@ -191,17 +194,25 @@ class Command(BaseCommand):
 
         # --- users ---
         if with_users:
+            # Local development keeps the well-known demo logins. On a live server
+            # (DEBUG off) the admin password comes from ADMIN_PASSWORD, or is
+            # generated and shown once, and the demo agent/player are not created.
+            live = not settings.DEBUG
             if not User.objects.filter(username="admin").exists():
+                pw = os.environ.get("ADMIN_PASSWORD") or (secrets.token_urlsafe(12) if live else "admin123")
                 User.objects.create_superuser(
-                    username="admin", password="admin123", role="admin",
+                    username="admin", password=pw, role="admin",
                     full_name="Site Administrator")
-                self.stdout.write("Created admin / admin123")
-            if not User.objects.filter(username="agent").exists():
+                self.stdout.write("Created admin / admin123" if not live else
+                                  ("Created admin (password from ADMIN_PASSWORD)" if os.environ.get("ADMIN_PASSWORD")
+                                   else f"Created admin with a generated password, shown once: {pw}"))
+            demo_users = (not live) or os.environ.get("SEED_DEMO_USERS") == "1"
+            if demo_users and not User.objects.filter(username="agent").exists():
                 a = User(username="agent", role="agent", full_name="Demo Agent")
                 a.set_password("agent123")
                 a.save()
                 self.stdout.write("Created agent / agent123")
-            if not User.objects.filter(username="user").exists():
+            if demo_users and not User.objects.filter(username="user").exists():
                 u = User(username="user", role="user", full_name="Demo Player",
                          agent=User.objects.filter(username="agent").first())
                 u.set_password("user123")

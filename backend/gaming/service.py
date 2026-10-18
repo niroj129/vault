@@ -177,7 +177,7 @@ def set_status(dep_id, status, data=None):
     """Move a deposit to the gateway's status; queue the load when paid.
     Safe to call repeatedly with the same status."""
     with transaction.atomic():
-        dep = Deposit.objects.select_for_update().select_related("game", "game__provider").get(pk=dep_id)
+        dep = Deposit.objects.select_for_update(of=("self",)).select_related("game", "game__provider").get(pk=dep_id)
         apply_gateway(dep, data or {})
         if data:
             import json
@@ -257,7 +257,7 @@ def run_load(dep_id, operator="auto", force=False):
     if force:
         allowed |= {Deposit.Load.FAILED, Deposit.Load.MANUAL}
     with transaction.atomic():
-        dep = Deposit.objects.select_for_update().select_related(
+        dep = Deposit.objects.select_for_update(of=("self",)).select_related(
             "user", "game", "game__provider").get(pk=dep_id)
         if dep.status != Deposit.Status.APPROVED or dep.load_status not in allowed:
             return dep
@@ -390,7 +390,7 @@ def mark_loaded(dep, staff, note="", amount=None):
     """Staff loaded the credits in the game's own panel. `amount` is what they
     actually put on (defaults to the expected credits); the cash-out rule uses it."""
     with transaction.atomic():
-        dep = Deposit.objects.select_for_update().select_related("user", "game", "login").get(pk=dep.pk)
+        dep = Deposit.objects.select_for_update(of=("self",)).select_related("user", "game", "login").get(pk=dep.pk)
         if dep.status != Deposit.Status.APPROVED or dep.load_status == Deposit.Load.LOADED:
             return dep
         login = dep.login or (GameLogin.objects.filter(user=dep.user, game=dep.game).first()
@@ -439,7 +439,7 @@ def _alert_staff(text):
 def approve_redeem(redeem, staff):
     """Take the credits back through the API; staff then pay the player."""
     with transaction.atomic():
-        r = Redeem.objects.select_for_update().select_related(
+        r = Redeem.objects.select_for_update(of=("self",)).select_related(
             "game", "game__provider", "user", "login").get(pk=redeem.pk)
         if r.status != Redeem.Status.PENDING:
             return r

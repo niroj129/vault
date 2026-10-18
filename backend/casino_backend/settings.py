@@ -1,6 +1,7 @@
 """Django settings for the white-label multi-tenant casino — DRF backend."""
 
 import os
+import sys
 from datetime import timedelta
 from pathlib import Path
 
@@ -177,6 +178,8 @@ if os.environ.get("REDIS_URL"):
     }}
 else:  # single process (dev)
     CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+if "test" in sys.argv[1:2]:  # tests make their own sites; never share Redis state between runs
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
 # Web Push (chat.push); generated into BASE_DIR/.vapid.json when unset
 VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
 VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
