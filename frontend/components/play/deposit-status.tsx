@@ -65,7 +65,7 @@ export function DepositStatus({ refId, onNew }: { refId: string; onNew: () => vo
 
   // BytePayout sends some methods to a hosted checkout page: go straight there, once per
   // payment (so coming back to this screen doesn't bounce the player out again).
-  const checkoutUrl = d && d.status === "pending" && !d.direct && !d.tag ? d.checkout_url : "";
+  const checkoutUrl = d && d.status === "pending" && !d.direct ? d.checkout_url : "";
   useEffect(() => {
     if (!checkoutUrl) return;
     const key = `pay-redirected:${refId}`;
@@ -134,18 +134,20 @@ export function DepositStatus({ refId, onNew }: { refId: string; onNew: () => vo
 
         {d.status === "pending" && !d.direct && (
           <div className="grid justify-items-start gap-3">
-            {d.tag ? (
-              <>
-                <p>Send exactly <b>{money(d.amount)}</b> with {d.method_label} to:</p>
-                <div className="flex items-center gap-1 rounded-md bg-muted py-1 pr-1 pl-3"><code className="font-mono text-lg font-bold">{d.tag}</code><CopyButton value={d.tag} label="tag" /></div>
-                {d.tag_email && <div className="flex items-center gap-1 rounded-md bg-muted py-1 pr-1 pl-3"><code className="font-mono">{d.tag_email}</code><CopyButton value={d.tag_email} label="email" /></div>}
-              </>
-            ) : d.checkout_url ? (
+            {d.checkout_url && (
               <>
                 <p>Taking you to the secure {d.method_label} page… If nothing happens, use the button. This screen updates by itself.</p>
                 <Button asChild size="lg"><a href={d.checkout_url}><ExternalLink aria-hidden />Open {d.method_label} checkout</a></Button>
               </>
-            ) : <p className="text-muted-foreground">Waiting for the payment provider…</p>}
+            )}
+            {d.tag && (
+              <>
+                <p>{d.checkout_url ? "Or send" : "Send"} exactly <b>{money(d.amount)}</b> with {d.method_label} to:</p>
+                <div className="flex items-center gap-1 rounded-md bg-muted py-1 pr-1 pl-3"><code className="font-mono text-lg font-bold">{d.tag}</code><CopyButton value={d.tag} label="tag" /></div>
+                {d.tag_email && <div className="flex items-center gap-1 rounded-md bg-muted py-1 pr-1 pl-3"><code className="font-mono">{d.tag_email}</code><CopyButton value={d.tag_email} label="email" /></div>}
+              </>
+            )}
+            {!d.checkout_url && !d.tag && <p className="text-muted-foreground">Waiting for the payment provider…</p>}
             <p className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner aria-hidden />Waiting for your payment · <Countdown until={d.expires_at} /></p>
           </div>
         )}
