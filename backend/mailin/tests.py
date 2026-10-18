@@ -43,6 +43,34 @@ class ParseTests(TestCase):
         self.assertFalse(parse.verified_sender("cashapp", "cash@square.com.evil.io", GMAIL_ARC))
         self.assertFalse(parse.verified_sender("cashapp", "cash@square.com", "Authentication-Results: dkim=fail"))
 
+    CHIME_FORWARD = (
+        "On Tue, Sep 8, 2026 at 12:43 Chime <alerts@account.chime.com> wrote:\n\n"
+        "> The funds are in your Chime account and available for immediate use.\n"
+        "> [image: Chime]\n"
+        "> <https://links.account.chime.com/ls/click?upn=u001.ID-2BYeNMr8dGP1Ibb3gkQFlnURk5dkUsasrY7-2BnDV3-2B9fY>\n"
+        "> [image: SpotMe]\n>\n"
+        "> You just got paid!\n"
+        "> Patrick, you just received $7.00 from *Marlette A*. for *\U0001F4B0\U0001F4B0*.\n"
+        "> The funds are in your Chime account and available to use right away.\n>\n"
+        "> View in Chime app\n")
+
+    def test_hand_forwarded_quoted_email_is_cleaned_and_read(self):
+        mail = parse.tidy(dict(provider="x", from_email="me@gmail.com", from_name="Me", subject="Fwd: You just got paid", text=self.CHIME_FORWARD))
+        self.assertFalse(any(l.lstrip().startswith(">") for l in mail["text"].splitlines()))  # no "> " quoting left
+        self.assertNotIn("http", mail["text"]); self.assertNotIn("[image", mail["text"]); self.assertNotIn("*", mail["text"])
+        self.assertEqual(mail["from_email"], "alerts@account.chime.com")  # the original sender, from the "wrote:" line
+        amount, payer, _note = parse.read_payment(mail["subject"], mail["text"])
+        self.assertEqual((str(amount), payer), ("7.00", "Marlette A"))
+        self.assertEqual(parse.app_of(mail["from_email"], mail["subject"], mail["text"]), "chime")
+
+    def test_gmail_forwarded_message_block_and_no_spoofing_of_normal_senders(self):
+        fwd = "---------- Forwarded message ---------\nFrom: Cash App <cash@square.com>\nDate: Tue\nSubject: x\n\nJane Roe sent you $12.00"
+        self.assertEqual(parse.tidy(dict(from_email="me@gmail.com", text=fwd))["from_email"], "cash@square.com")
+        # a real app sender is never replaced, and an ordinary person quoted in the text isn't promoted to an app
+        self.assertEqual(parse.tidy(dict(from_email="cash@square.com", text=fwd))["from_email"], "cash@square.com")
+        other = "On Mon, Bob <bob@example.com> wrote:\n> hi"
+        self.assertEqual(parse.tidy(dict(from_email="me@gmail.com", text=other))["from_email"], "me@gmail.com")
+
     def test_gmail_confirmation(self):
         code, link = parse.gmail_confirmation(
             "forwarding-noreply@google.com", "(#183920471) Gmail Forwarding Confirmation - Receive Mail from me@gmail.com",

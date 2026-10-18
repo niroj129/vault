@@ -46,6 +46,38 @@ def html_to_text(html):
     return re.sub(r"\n\s*\n+", "\n\n", re.sub(r"[ \t\xa0]+", " ", text)).strip()
 
 
+_WROTE = re.compile(r"^On .{3,140}?(?P<who>[^<>\n]*)<(?P<addr>[^<>\s]+@[^<>\s]+)>\s*wrote:\s*$", re.M)
+_FWD = re.compile(r"^-{3,}\s*Forwarded message\s*-{3,}\s*\n(?:[^\n]*\n){0,3}?From:\s*(?P<who>[^<\n]*)<(?P<addr>[^<>\s]+@[^<>\s]+)>", re.M | re.I)
+
+
+def tidy(mail):
+    """Make a hand-forwarded email readable. Gmail's auto-forward keeps the original untouched, but a manual
+    forward arrives quoted ("> …" under "On … <sender> wrote:", or a "Forwarded message" block), sent by the
+    forwarder, full of tracking links, "[image: …]" and *markdown*. Undo that, and take the original sender from
+    the quote — only when it names a payment app, and it never makes the email count as verified."""
+    mail = dict(mail)
+    text = mail.get("text") or ""
+    lines = text.splitlines()
+    nonblank = [l for l in lines if l.strip()]
+    if nonblank and sum(1 for l in nonblank if l.lstrip().startswith(">")) * 2 >= len(nonblank):
+        text = "\n".join(re.sub(r"^(?:\s*>)+ ?", "", l) for l in lines)
+    orig = _WROTE.search(mail.get("text") or "") or _FWD.search(text)
+    if orig:
+        addr = orig.group("addr").strip().lower()
+        dom = addr.rsplit("@", 1)[-1]
+        sent_by_app = any(dom == d or dom.endswith("." + d) for ds in APP_DOMAINS.values() for d in ds)
+        cur = (mail.get("from_email") or "").rsplit("@", 1)[-1].lower()
+        already_app = any(cur == d or cur.endswith("." + d) for ds in APP_DOMAINS.values() for d in ds)
+        if sent_by_app and not already_app:
+            mail["from_email"], mail["from_name"] = addr, (orig.group("who") or "").strip(" \"'")
+    text = re.sub(r"<https?://[^>\s]+>", " ", text)          # <tracking links>
+    text = re.sub(r"https?://\S{60,}", " ", text)             # very long bare links
+    text = re.sub(r"\[image:[^\]]*\]?", " ", text)           # [image: Chime]
+    text = re.sub(r"\*+", "", text)                           # *bold*
+    mail["text"] = re.sub(r"\n{3,}", "\n\n", text).strip()
+    return mail
+
+
 def _date(v):
     try:
         return parsedate_to_datetime(v) if v else None
@@ -117,7 +149,7 @@ AMT = r"\$\s?(?P<amt>\d{1,3}(?:,\d{3})+(?:\.\d{2})?|\d+(?:\.\d{2})?)"
 NAME = r"(?P<name>[A-Za-z][A-Za-z.'\-]*(?: [A-Za-z][A-Za-z.'\-]*){0,3})"
 PATTERNS = [
     re.compile(NAME + r" (?:sent you|paid you|has sent you) " + AMT, re.I),
-    re.compile(r"(?:you(?:'ve)? received|you got|received) " + AMT + r"(?: USD)?(?: \w+)? from " + NAME, re.I),
+    re.compile(r"(?:you(?:'ve| just)? received|you just got|you got|received) " + AMT + r"(?: USD)?(?: \w+)? from " + NAME, re.I),
     re.compile(r"(?:payment|money) (?:of |for )?" + AMT + r"(?: USD)? (?:received )?from " + NAME, re.I),
 ]
 NOT_NAMES = {"you", "someone", "a friend", "your", "we"}

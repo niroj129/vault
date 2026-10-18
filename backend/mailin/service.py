@@ -63,6 +63,7 @@ def find_match(em):
 
 def ingest(mail):
     """Save a normalized email (see parse.normalize). Returns (email, created)."""
+    mail = parse.tidy(mail)
     mid = (mail.get("message_id") or "").strip()[:300]
     if mid:
         old = InboundEmail.objects.filter(message_id=mid).first()
