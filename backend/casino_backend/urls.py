@@ -1,7 +1,8 @@
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import include, path, re_path
+from django.views.static import serve as serve_file
 from rest_framework.routers import DefaultRouter
 
 from accounts.views import (AdminUserViewSet, ChangePasswordView, LoginLogView,
@@ -178,3 +179,7 @@ urlpatterns = [
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+else:
+    # Caddy/nginx serve /media to browsers; Next's image optimizer fetches
+    # uploads through the backend, which must answer too.
+    urlpatterns += [re_path(r"^media/(?P<path>.*)$", serve_file, {"document_root": settings.MEDIA_ROOT})]
