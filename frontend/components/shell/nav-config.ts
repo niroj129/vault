@@ -11,7 +11,7 @@ export function accountLink(user: User | null): NavItem | null {
   if (!user) return null;
   if (user.is_platform_owner) return { href: "/platform", label: "Owner console", icon: Globe };
   if (user.role === "admin") return { href: "/admin", label: "Admin panel", icon: LayoutDashboard };
-  if (user.role === "agent") return { href: "/agent", label: "My players", icon: Users };
+  if (user.role === "agent") return { href: "/agent", label: "Agent console", icon: Users };
   return { href: "/profile", label: "Profile", icon: CircleUserRound };
 }
 

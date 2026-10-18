@@ -112,7 +112,7 @@ export default function DepositsPage() {
             ))}
             <Card className="glass gap-2 p-4"><span className="flex items-center justify-between text-sm text-muted-foreground">Paid today<Wallet className="size-5" aria-hidden /></span>
               <span className="text-3xl font-bold tabular-nums">{s ? money(s.paid_today) : "—"}</span><span className="text-sm text-muted-foreground">{s?.paid_count_today ?? 0} payments · {s?.pending ?? 0} checkouts open</span></Card>
-            <Link href="/admin/redeems" className="glass grid gap-2 rounded-xl border p-4 transition-colors duration-200 hover:bg-accent">
+            <Link href={user?.role === "agent" ? "/agent/cashouts" : "/admin/redeems"} className="glass grid gap-2 rounded-xl border p-4 transition-colors duration-200 hover:bg-accent">
               <span className="flex items-center justify-between text-sm text-muted-foreground">Cash outs waiting<Receipt className="size-5" aria-hidden /></span>
               <span className="text-3xl font-bold tabular-nums">{s?.redeems_waiting ?? "—"}</span><span className="text-sm text-muted-foreground">review requests</span></Link>
           </div>

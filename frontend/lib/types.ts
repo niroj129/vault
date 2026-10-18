@@ -36,6 +36,11 @@ export interface AdminUser extends User {
   login_count: number | null;
 }
 
+/** The numbers at the top of the agent console. */
+export interface AgentSummary { players: number; active_players: number; to_load: number; to_check: number; cashouts_waiting: number; loaded_today: Money }
+/** One player's account on one game, as staff see it (password included). */
+export interface StaffLogin { id: number; user: number; game: number; game_name: string; username: string; password: string; note: string; updated_at: string }
+
 export interface Category { id: number; name: string; slug: string; icon: string; sort_order: number; game_count: number }
 
 export interface Game {

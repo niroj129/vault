@@ -680,6 +680,13 @@ class PayMethodViewSet(viewsets.ModelViewSet):
             ser.save()
 
 
+def staff_redeems(user):
+    qs = Redeem.objects.select_related("user", "game", "login", "handled_by", "deposit")
+    if not user.is_admin_role:
+        qs = qs.filter(user__agent=user)
+    return qs
+
+
 def staff_deposits(user):
     qs = Deposit.objects.select_related("user", "game", "login", "created_by",
                                         "pay_method", "checked_by").prefetch_related("emails")
@@ -701,6 +708,8 @@ def admin_deposits(request):
         qs = qs.filter(load_status__in=p["load_status"].split(","))
     if p.get("gateway"):
         qs = qs.filter(gateway=p["gateway"])
+    if (p.get("user") or "").isdigit():
+        qs = qs.filter(user_id=int(p["user"]))
     if p.get("q"):
         q = p["q"].strip()
         qs = qs.filter(Q(reference__icontains=q) | Q(user__username__icontains=q)
@@ -720,7 +729,7 @@ def admin_deposits(request):
             "to_check": base.filter(status=Deposit.Status.PENDING, gateway="direct").count(),
             "needs_staff": base.filter(status=Deposit.Status.APPROVED,
                                        load_status__in=[Deposit.Load.FAILED, Deposit.Load.MANUAL]).count(),
-            "redeems_waiting": Redeem.objects.filter(status=Redeem.Status.PENDING).count(),
+            "redeems_waiting": staff_redeems(request.user).filter(status=Redeem.Status.PENDING).count(),
         },
         "results": [deposit_dict(d, staff=True) for d in qs[:limit]],
     })
@@ -844,13 +853,35 @@ def gateway_balance(request):
 @api_view(["GET"])
 @permission_classes([IsAdminOrAgent])
 def admin_redeems(request):
-    qs = Redeem.objects.select_related("user", "game", "login", "handled_by", "deposit")
-    if not request.user.is_admin_role:
-        qs = qs.filter(user__agent=request.user)
+    qs = staff_redeems(request.user)
     if request.query_params.get("status"):
         qs = qs.filter(status=request.query_params["status"])
+    if (request.query_params.get("user") or "").isdigit():
+        qs = qs.filter(user_id=int(request.query_params["user"]))
     s = SiteSettings.load()
     return Response([redeem_dict(r, staff=True, s=s) for r in qs[:200]])
+
+
+@api_view(["GET"])
+@permission_classes([IsAdminOrAgent])
+def agent_summary(request):
+    """The numbers at the top of the agent console (an agent's own players; an admin sees the whole site)."""
+    me = request.user
+    players = User.objects.filter(role="user")
+    if not me.is_admin_role:
+        players = players.filter(agent=me)
+    deps = staff_deposits(me)
+    today = timezone.localdate()
+    return Response({
+        "players": players.count(),
+        "active_players": players.filter(is_active=True).count(),
+        "to_load": deps.filter(status=Deposit.Status.APPROVED,
+                               load_status__in=[Deposit.Load.FAILED, Deposit.Load.MANUAL]).count(),
+        "to_check": deps.filter(status=Deposit.Status.PENDING, gateway="direct").count(),
+        "cashouts_waiting": staff_redeems(me).filter(status=Redeem.Status.PENDING).count(),
+        "loaded_today": deps.filter(status=Deposit.Status.APPROVED, approved_at__date=today)
+                            .exclude(gateway="freeplay").aggregate(s=Sum("amount"))["s"] or 0,
+    })
 
 
 @api_view(["POST"])

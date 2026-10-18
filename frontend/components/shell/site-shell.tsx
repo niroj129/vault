@@ -10,7 +10,7 @@ import { MobileNav } from "./mobile-nav";
 import { SupportFab } from "./support-fab";
 import { TopBar } from "./top-bar";
 
-const BARE = ["/admin", "/platform", "/login", "/signup"]; // pages with their own chrome
+const BARE = ["/admin", "/agent", "/platform", "/login", "/signup"]; // pages with their own chrome
 
 export function SiteShell({ categories, footer, defaultOpen, children }:
   { categories: Category[]; footer: ReactNode; defaultOpen: boolean; children: ReactNode }) {

@@ -140,6 +140,7 @@ api = [
     # staff
     path("admin/deposits/", gaming.admin_deposits),
     path("admin/deposits/<int:pk>/<str:act>/", gaming.admin_deposit_action),
+    path("agent/summary/", gaming.agent_summary),
     path("admin/redeems/", gaming.admin_redeems),
     path("admin/redeems/<int:pk>/<str:act>/", gaming.admin_redeem_action),
     path("admin/game-accounts/", gaming.staff_login_action),

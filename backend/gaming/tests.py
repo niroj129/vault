@@ -1010,3 +1010,47 @@ class FastApiDocumentTests(TestCase):
         self.assertTrue(seen[0][0].endswith("/fast/user/resetPasswd"))
         self.assertEqual((seen[0][1]["account"], seen[0][1]["new_passwd"]), ("bob1", "NewPass1"))
         self.assertNotIn("passwd", seen[0][1])
+
+
+class AgentConsoleApiTests(TestCase):
+    """The agent console only ever sees and counts the agent's own players."""
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        self.a = make_tenant("alpha", A, feature_payments=True)
+        self.agent = make_user(self.a, "agent1", role="agent")
+        self.other = make_user(self.a, "agent2", role="agent")
+        self.mine = make_user(self.a, "mine", agent=self.agent)
+        self.theirs = make_user(self.a, "theirs", agent=self.other)
+        self.admin = make_user(self.a, "admin", role="admin")
+        with use_tenant(self.a):
+            self.game = Game.objects.create(name="Juwa")
+            for u in (self.mine, self.theirs):
+                Redeem.objects.create(user=u, game=self.game, amount=50, payout_method="cashapp", payout_handle="$x")
+                Deposit.objects.create(user=u, game=self.game, method="cash", gateway="manual", amount=20,
+                                       credit_amount=20, status="approved", load_status="manual")
+        self.c = client_for(A, "agent1")
+
+    def test_summary_counts_only_my_players_and_work(self):
+        r = self.c.get("/api/agent/summary/")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual((r.data["players"], r.data["to_load"], r.data["cashouts_waiting"]), (1, 1, 1))
+        full = client_for(A, "admin").get("/api/agent/summary/").data
+        self.assertEqual((full["players"], full["to_load"], full["cashouts_waiting"]), (2, 2, 2))  # admin: the whole site
+
+    def test_deposit_summary_cash_out_count_is_scoped_to_the_agent(self):
+        r = self.c.get("/api/admin/deposits/")
+        self.assertEqual(r.data["summary"]["redeems_waiting"], 1)
+
+    def test_per_player_filters_and_no_peeking_at_other_agents_players(self):
+        d = self.c.get(f"/api/admin/deposits/?user={self.mine.id}").data["results"]
+        self.assertEqual([x["user"]["username"] for x in d], ["mine"])
+        self.assertEqual(self.c.get(f"/api/admin/deposits/?user={self.theirs.id}").data["results"], [])
+        self.assertEqual(self.c.get(f"/api/admin/redeems/?user={self.theirs.id}").data, [])
+        self.assertEqual(len(self.c.get(f"/api/admin/redeems/?user={self.mine.id}").data), 1)
+
+    def test_agent_creates_a_player_that_is_theirs(self):
+        r = self.c.post("/api/users/", {"username": "newbie", "password": "pass12345", "role": "admin"}, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual((r.data["role"], r.data["agent"]), ("user", self.agent.id))
