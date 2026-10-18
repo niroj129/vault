@@ -96,7 +96,7 @@ class ExternalAdapter(Adapter):
         from datetime import date
         out = []
         for page in (1, 2, 3):
-            data = self.call("external/getLowDepositUsers", {"query_date": date.today().isoformat(), "page": page, "page_size": 50})
+            data = self.call("getLowDepositUsers", {"query_date": date.today().isoformat(), "page": page, "page_size": 50})
             if data.get("code") != 0:
                 raise ApiError(str(data.get("msg") or "The platform wouldn't list its players."))
             rows = data.get("data") or []
