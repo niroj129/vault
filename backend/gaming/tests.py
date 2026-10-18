@@ -898,3 +898,43 @@ class ProviderLinkTests(TestCase):
             self.assertEqual(Game.objects.get(pk=fk.pk).provider.name, "fire  KIRIN")
             self.assertIsNone(Game.objects.get(pk=other.pk).provider)        # different name: untouched
             self.assertEqual(Game.objects.get(pk=tied.pk).provider_id, taken.id)  # already tied: untouched
+
+
+class AshxReplyStyleTests(TestCase):
+    """Fire Kirin documents {"code": 200, "agentKey"}; Orion Stars sends {"code": "200", "agentkey"}."""
+
+    class Resp:
+        status_code, text = 200, ""
+
+        def __init__(self, body):
+            self.body = body
+
+        def json(self):
+            return self.body
+
+    def run_with(self, login_reply, call_reply):
+        from django.core.cache import cache
+        from .providers.ashx import AshxAdapter
+        cache.clear()
+        p = GameProvider.objects.create(name="X", kind="ashx", base_url="https://x.test:8033",
+                                        agent_name="agent01", agent_password="pw")
+        replies = iter([login_reply, call_reply])
+        with mock.patch("gaming.providers.ashx.http", lambda *a, **k: self.Resp(next(replies))):
+            ad = AshxAdapter(p)
+            return ad.agent_balance(), ad.create_account("player01", "secret1")
+
+    def test_documented_reply_style(self):
+        bal, made = self.run_with({"code": 200, "agentKey": "k" * 32, "Balance": "376"}, {"code": 200})
+        self.assertTrue(bal.ok and made.ok)
+        self.assertEqual(str(bal.balance), "376")
+
+    def test_orion_reply_style_string_code_and_lowercase_keys(self):
+        bal, made = self.run_with({"code": "200", "agentkey": "k" * 32, "balance": "376"}, {"code": "200"})
+        self.assertTrue(bal.ok and made.ok)
+        self.assertEqual(str(bal.balance), "376")
+
+    def test_a_refusal_shows_the_vendors_message(self):
+        from .providers import ApiError
+        with self.assertRaises(ApiError) as cm:
+            self.run_with({"code": "201", "msg": "Login failed. Please check and try again."}, {})
+        self.assertIn("Login failed", str(cm.exception))

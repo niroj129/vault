@@ -16,6 +16,20 @@ from .base import Adapter, ApiError, Result, http, json_of, md5, now_ms
 _lock = threading.Lock()
 
 
+def _norm(data):
+    """Vendors on this API differ in small ways: Fire Kirin documents {"code": 200, "agentKey": …}
+    while Orion Stars sends {"code": "200", "agentkey": …}. Lower-case every key and read the
+    code as a number, so one adapter serves them all."""
+    if not isinstance(data, dict):
+        return data
+    out = {str(k).lower(): v for k, v in data.items()}
+    try:
+        out["code"] = int(str(out.get("code")).strip())
+    except (TypeError, ValueError):
+        pass
+    return out
+
+
 class AshxAdapter(Adapter):
     whole_amounts = True
     account_min, account_max = 6, 16
@@ -42,12 +56,12 @@ class AshxAdapter(Adapter):
         resp = http(self.p, "POST", self.endpoint, params={
             "action": "agentLogin", "agentName": self.p.agent_name,
             "agentPasswd": md5(self.p.agent_password), "time": self._time()})
-        data = json_of(resp)
-        if data.get("code") != 200 or not data.get("agentKey"):
-            raise ApiError(f"Agent login failed: {data.get('msg') or 'no key'}")
-        cache.set(ck, data["agentKey"], 6 * 3600)
-        cache.set(f"gp:ashx:{self.p.pk}:bal", data.get("Balance"), 6 * 3600)
-        return data["agentKey"]
+        data = _norm(json_of(resp))
+        if not isinstance(data, dict) or data.get("code") != 200 or not data.get("agentkey"):
+            raise ApiError(f"Agent login failed: {(data.get('msg') if isinstance(data, dict) else '') or 'no key'}")
+        cache.set(ck, data["agentkey"], 6 * 3600)
+        cache.set(f"gp:ashx:{self.p.pk}:bal", data.get("balance"), 6 * 3600)
+        return data["agentkey"]
 
     def call(self, action, params=None, retry=True):
         key = self._key()
@@ -56,7 +70,7 @@ class AshxAdapter(Adapter):
         q = {"action": action, "agentName": self.p.agent_name, "time": t,
              "sign": sign}
         q.update(params or {})
-        data = json_of(http(self.p, "POST", self.endpoint, params=q))
+        data = _norm(json_of(http(self.p, "POST", self.endpoint, params=q)))
         if not isinstance(data, dict):
             raise ApiError("Unexpected reply from the platform")
         msg = str(data.get("msg") or "").lower()
@@ -104,8 +118,8 @@ class AshxAdapter(Adapter):
     def balance(self, login):
         data = self.call("queryInfo", {"account": login.username})
         return self.result(data, balance=data.get("userbalance"),
-                           platform_user_id=str(data.get("gameId") or ""),
-                           play_url=data.get("webLoginUrl") or "")
+                           platform_user_id=str(data.get("gameid") or ""),
+                           play_url=data.get("webloginurl") or "")
 
     def agent_balance(self):
         self._key(fresh=True)
