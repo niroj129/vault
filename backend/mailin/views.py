@@ -50,7 +50,10 @@ def inbound(request, token):
         return HttpResponse(status=403)
     mail = parse.normalize(request.content_type, body, form)
     if not mail:
-        return JsonResponse({"ok": False, "detail": "Unrecognised payload"}, status=400)
+        # say what arrived (field names only, never values) so a wrong delivery format is easy to fix
+        got = sorted((json.loads(body or b"{}").keys() if body and "json" in (request.content_type or "") and isinstance(json.loads(body or b"{}"), dict) else form.keys()))[:15] \
+            if (body or form) else []
+        return JsonResponse({"ok": False, "detail": "Unrecognised payload", "content_type": request.content_type, "fields": got}, status=400)
     em, created = service.ingest(mail)
     return JsonResponse({"ok": True, "id": em.id, "duplicate": not created})
 

@@ -1,7 +1,7 @@
 """Turn a provider's inbound-webhook payload into one plain email dict, then
 read payment notifications out of it.
 
-Providers: Postmark (JSON), CloudMailin (JSON), Mailgun (form), SendGrid
+Providers: Postmark (JSON), CloudMailin (JSON or its default multipart form), Mailgun (form), SendGrid
 Inbound Parse (form). Attachments are ignored.
 """
 import json
@@ -77,6 +77,13 @@ def normalize(content_type, body, form):
                     text=data.get("plain") or html_to_text(data.get("html")), message_id=get("Message-ID"),
                     headers=hdrs, sent_at=_date(get("Date")))
     f = form or {}
+    if any(k.startswith(("headers[", "envelope[")) for k in f):  # CloudMailin "Multipart Normalized" (its default)
+        hv = lambda k: f.get(f"headers[{k}]") or f.get(f"headers[{k.lower()}]") or ""
+        name, addr = parseaddr(hv("from") or f.get("envelope[from]", ""))
+        hdrs = "\n".join(f"{k[len('headers['):-1]}: {v}" for k, v in f.items() if k.startswith("headers["))
+        return dict(provider="cloudmailin", from_email=addr, from_name=name, to=hv("to") or f.get("envelope[to]", ""),
+                    subject=hv("subject"), text=f.get("plain") or html_to_text(f.get("html")),
+                    message_id=hv("message_id") or hv("message-id"), headers=hdrs, sent_at=_date(hv("date")))
     if "body-plain" in f or "stripped-text" in f:  # Mailgun
         name, addr = parseaddr(f.get("from") or f.get("From") or f.get("sender", ""))
         try:

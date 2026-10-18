@@ -121,6 +121,31 @@ class InboundFlowTests(TestCase):
         self.assertEqual(setup["gmail_confirm"]["code"], "183920471")
         self.assertIn("/api/mail/inbound/tok-secret-123/", setup["url"])
 
+    def post_form(self, fields, token="tok-secret-123"):
+        with self.captureOnCommitCallbacks(execute=True):
+            return self.web.post(f"/api/mail/inbound/{token}/", fields)  # multipart/form-data
+
+    def test_gmail_confirmation_via_cloudmailin_default_multipart_format(self):
+        r = self.post_form({"envelope[to]": "x@cloudmailin.net", "envelope[from]": "forwarding-noreply@google.com",
+                            "headers[from]": "Gmail Team <forwarding-noreply@google.com>", "headers[to]": "x@cloudmailin.net",
+                            "headers[subject]": "(Gmail Forwarding confirmation - Receive mail from me)", "headers[message_id]": "<m1@mail.gmail.com>",
+                            "plain": "Confirmation code: 183920471 https://mail-settings.google.com/mail/vf-abc"})
+        self.assertEqual(r.status_code, 200, r.content)
+        setup = self.admin.get("/api/admin/mail/setup/").data
+        self.assertEqual(setup["gmail_confirm"]["code"], "183920471")
+
+    def test_cloudmailin_multipart_payment_email_is_read(self):
+        r = self.post_form({"envelope[to]": "x@cloudmailin.net", "headers[from]": "Cash App <cash@square.com>",
+                            "headers[subject]": "Jane Roe sent you $50.00", "headers[message_id]": "<pay1@x>",
+                            "plain": "Jane Roe sent you $50.00 for \"" + self.d_cash.code + "\""})
+        self.assertEqual(r.status_code, 200, r.content)
+
+    def test_unknown_payloads_say_what_arrived_without_leaking_values(self):
+        r = self.post_form({"mystery": "secret-value"})
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["fields"], ["mystery"])
+        self.assertNotIn("secret-value", r.content.decode())
+
     def test_security(self):
         self.assertEqual(self.post_json({"TextBody": "x", "FromFull": {}}, token="wrong").status_code, 404)
         with use_tenant(self.t):
