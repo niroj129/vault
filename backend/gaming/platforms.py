@@ -194,6 +194,78 @@ def platform_link(request, pk):
                      "site_password": site_pw}, status=status.HTTP_201_CREATED)
 
 
+def _tmp_login(provider, ad, username):
+    """The saved login for this game name if we have one, else a throwaway object the adapter can use."""
+    lg = _login_for(provider, username)
+    if lg:
+        return lg, lg
+    tmp = GameLogin(username=username)
+    if getattr(ad, "needs_platform_id", False):
+        pid = service._call(ad.find_platform_id, tmp)
+        if not pid:
+            return None, None
+        tmp.platform_user_id = str(pid)
+    return tmp, None
+
+
+@api_view(["POST"])
+@permission_classes([IsAdminRole])
+def platform_account_action(request, pk):
+    """Load, redeem, reset the password of or kick out ANY account on the platform by its game login —
+    no site player needed. Loads and redeems go in the game ledger (tied to the player if there is one)."""
+    from decimal import Decimal, InvalidOperation
+
+    from content.models import GameTxn
+    provider = get_object_or_404(_providers(), pk=pk)
+    ad = service.adapter_for(provider)
+    username = (request.data.get("username") or "").strip()
+    act = request.data.get("action")
+    if not username or act not in ("load", "withdraw", "reset", "kick"):
+        return bad("Enter the game login and choose what to do.")
+    try:
+        target, saved = _tmp_login(provider, ad, username)
+    except service.GameError as e:
+        return bad(str(e))
+    if target is None:
+        return bad(f"No account named “{username}” on {provider.name}.", 404)
+    try:
+        if act in ("load", "withdraw"):
+            try:
+                amount = Decimal(str(request.data.get("amount")))
+                assert amount > 0
+            except (InvalidOperation, AssertionError):
+                return bad("Enter an amount above 0.")
+            amount = ad.amount(amount)
+            order_id = service._order_id("L" if act == "load" else "W")
+            res = service._call(ad.recharge if act == "load" else ad.withdraw, target, amount, order_id)
+            game = saved.game if saved else _game_for(provider)
+            GameTxn.objects.create(
+                kind="load" if act == "load" else "withdraw", user=saved.user if saved else None, game=game, account_name=username,
+                platform_user_id=res.platform_user_id or target.platform_user_id or "", amount=amount,
+                payment_method=(request.data.get("method") or "staff")[:60], order_id=order_id, platform_txn_id=res.txn_id or "",
+                user_balance="" if res.balance is None else str(res.balance), operator=request.user.username,
+                status="success" if res.ok else "failed", note=((request.data.get("note") or "") if res.ok else res.message)[:200])
+            if saved and res.ok and res.balance is not None:
+                GameLogin.objects.filter(pk=saved.pk).update(last_balance=str(res.balance))
+            if not res.ok:
+                return bad(res.message or "The platform refused it.")
+            return Response({"ok": True, "balance": res.balance, "message": "Done"})
+        if act == "reset":
+            pw = (request.data.get("password") or "").strip() or make_password()
+            res = service._call(ad.reset_password, target, pw)
+            if not res.ok:
+                return bad(res.message or "The platform refused it.")
+            if saved:
+                GameLogin.objects.filter(pk=saved.pk).update(password=pw)
+            return Response({"ok": True, "password": pw})
+        res = service._call(ad.kick, target)
+        if not res.ok:
+            return bad(res.message or "The platform refused it.")
+        return Response({"ok": True})
+    except service.GameError as e:
+        return bad(str(e))
+
+
 @api_view(["GET"])
 @permission_classes([IsAdminRole])
 def platform_search(request, pk):
@@ -263,7 +335,17 @@ def platform_history(request, pk):
     username = (request.query_params.get("username") or "").strip()
     lg = _login_for(provider, username) if username else None
     if not lg:
-        return Response({"linked": False, "transactions": [], "activity": [], "totals": {"loaded": 0, "redeemed": 0, "paid": 0, "cashed_out": 0}})
+        # an account nobody owns on the site: the ledger of what was sent to it still exists
+        games = list(Game.objects.filter(provider=provider).values_list("id", flat=True))
+        txns = GameTxn.objects.filter(account_name__iexact=username, user__isnull=True, game_id__in=games) if username else GameTxn.objects.none()
+        ok = txns.filter(status="success")
+        rows = [{"id": t.id, "kind": t.kind, "amount": t.amount, "status": t.status, "method": t.payment_method, "operator": t.operator,
+                 "balance_after": t.user_balance or None, "order_id": t.order_id, "note": t.note, "created_at": t.created_at} for t in txns[:150]]
+        act = [{"key": f"t{t.id}", "type": "redeem" if t.kind == "withdraw" else "load", "at": t.created_at, "amount": t.amount, "credits": t.amount,
+                "method": t.payment_method or "staff", "status": "paid", "load_status": "", "promo": "", "bonus": 0} for t in ok[:60]]
+        return Response({"linked": False, "transactions": rows, "activity": act,
+                         "totals": {"loaded": ok.filter(kind="load").aggregate(s=Sum("amount"))["s"] or 0,
+                                    "redeemed": ok.filter(kind="withdraw").aggregate(s=Sum("amount"))["s"] or 0, "paid": 0, "cashed_out": 0}})
     txns = GameTxn.objects.filter(user=lg.user, game=lg.game, account_name__iexact=lg.username)
     ok = txns.filter(status="success")
     rows = [{"id": t.id, "kind": t.kind, "amount": t.amount, "status": t.status, "method": t.payment_method,

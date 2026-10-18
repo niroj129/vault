@@ -1272,3 +1272,48 @@ class PlatformSearchApiTests(PlatformConsoleTests):
         r = self.c.get(self.url("remote-history") + "?username=someone")
         self.assertEqual((r.data["supported"], r.data["rows"][0]["amount"]), (True, 20.0))
         self.assertEqual(client_for(A, "agent1").get(self.url("search")).status_code, 403)
+
+
+class PlatformDirectActionTests(PlatformConsoleTests):
+    """Load, redeem, reset and kick work on an account nobody owns on the site."""
+
+    class Ad(PlatformConsoleTests.Ad):
+        def reset_password(self, login, pw):
+            FakeAdapter.calls.append(("reset", login.username, pw))
+            return Result(True, "OK")
+
+        def kick(self, login):
+            FakeAdapter.calls.append(("kick", login.username))
+            return Result(True, "OK")
+
+    def act(self, **body):
+        return self.c.post(self.url("account"), body, format="json")
+
+    def test_load_and_redeem_an_unlinked_account_and_see_it_in_history(self):
+        r = self.act(username="loose01", action="load", amount="12.50", method="cash")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.data["balance"], "50.00")  # what the (fake) platform reports back
+        self.assertEqual(self.act(username="loose01", action="withdraw", amount=5).status_code, 200)
+        loads = [c for c in FakeAdapter.calls if c[0] in ("load", "withdraw")]
+        self.assertEqual([(c[0], c[1]) for c in loads], [("load", "loose01"), ("withdraw", "loose01")])
+        h = self.c.get(self.url("history") + "?username=loose01").data
+        self.assertFalse(h["linked"])
+        self.assertEqual(sorted(t["kind"] for t in h["transactions"]), ["load", "withdraw"])
+        self.assertEqual((float(h["totals"]["loaded"]), float(h["totals"]["redeemed"])), (12.5, 5.0))
+
+    def test_a_linked_account_records_against_its_player(self):
+        self.c.post(self.url("link"), {"username": "someone", "user": self.ann.id}, format="json")
+        self.act(username="someone", action="load", amount=7)
+        with use_tenant(self.a):
+            from content.models import GameTxn
+            self.assertEqual(GameTxn.objects.get(account_name="someone").user_id, self.ann.id)
+
+    def test_reset_kick_validation_and_missing_accounts(self):
+        r = self.act(username="loose01", action="reset")
+        self.assertTrue(r.data["password"])
+        self.assertEqual(self.act(username="loose01", action="kick").status_code, 200)
+        self.assertIn(("kick", "loose01"), FakeAdapter.calls)
+        self.assertEqual(self.act(username="loose01", action="load", amount=0).status_code, 400)
+        self.assertEqual(self.act(username="", action="load", amount=5).status_code, 400)
+        self.assertEqual(self.act(username="x", action="explode").status_code, 400)
+        self.assertEqual(client_for(A, "agent1").post(self.url("account"), {"username": "x", "action": "kick"}, format="json").status_code, 403)

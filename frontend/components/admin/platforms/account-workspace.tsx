@@ -18,6 +18,7 @@ import { apiFetch, errorText } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { ago, dateTime, money } from "@/lib/format";
 import type { AccountActivity, AccountHistory, AdminUser, Game, Platform, PlatformLookup } from "@/lib/types";
+import { DirectMoveDialog } from "./direct-move-dialog";
 import { LinkDialog } from "./link-dialog";
 import { KickDialog, ResetPasswordDialog } from "./account-tools";
 import { TransactionsTab } from "./transactions-tab";
@@ -65,7 +66,7 @@ export function AccountWorkspace({ platform, username, onChanged, onCreate }: { 
       <div className="glass grid justify-items-center gap-3 rounded-2xl border p-8 text-center">
         <span className="grid size-14 place-items-center rounded-full bg-warning/15 text-warning"><UserX className="size-7" aria-hidden /></span>
         <h2 className="text-xl font-semibold">No account named “{username}”</h2>
-        <p className="max-w-md text-muted-foreground">{res.message || "Check the spelling, or create it."} This looks on {platform.name} itself, so it also finds accounts made in its own panel.</p>
+        <p className="max-w-md text-muted-foreground">{(res.message || "Check the spelling, or create it.").replace(/\.?$/, ".")} This looks on {platform.name} itself, so it also finds accounts made in its own panel.</p>
         <Button onClick={() => onCreate(username)}><Plus aria-hidden />Create “{username}”</Button>
       </div>
     );
@@ -81,7 +82,8 @@ export function AccountWorkspace({ platform, username, onChanged, onCreate }: { 
             <h2 className="flex items-center gap-1 text-2xl font-bold"><span className="truncate">{res.username}</span><CopyButton value={res.username} label="login name" size="icon-xs" /></h2>
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <Badge variant="secondary">{platform.name}</Badge>
-              {login ? <span className="text-muted-foreground">Player <b className="text-foreground">{login.player.full_name || login.player.username}</b> · @{login.player.username}</span> : <Badge variant="outline">Not linked to a player</Badge>}
+              {login ? <span className="text-muted-foreground">Player <b className="text-foreground">{login.player.full_name || login.player.username}</b> · @{login.player.username}</span>
+                : <Button size="xs" variant="outline" onClick={() => setDlg("link")}><Link2 aria-hidden />Link to a site player (optional)</Button>}
             </div>
           </div>
           <div className="grid justify-items-end gap-0.5" aria-live="polite">
@@ -92,17 +94,11 @@ export function AccountWorkspace({ platform, username, onChanged, onCreate }: { 
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2 border-t p-4 sm:grid-cols-4">
-          <Button size="lg" disabled={!login} onClick={() => setDlg("load")}><Wallet aria-hidden />Load</Button>
-          <Button size="lg" variant="outline" disabled={!login} onClick={() => setDlg("redeem")}><ArrowDownToLine aria-hidden />Redeem</Button>
-          <Button size="lg" variant="outline" disabled={!login} onClick={() => setDlg("reset")}><KeyRound aria-hidden />New password</Button>
-          <Button size="lg" variant="outline" disabled={!login} onClick={() => setDlg("kick")}><LogOut aria-hidden />Kick out</Button>
+          <Button size="lg" onClick={() => setDlg("load")}><Wallet aria-hidden />Load</Button>
+          <Button size="lg" variant="outline" onClick={() => setDlg("redeem")}><ArrowDownToLine aria-hidden />Redeem</Button>
+          <Button size="lg" variant="outline" onClick={() => setDlg("reset")}><KeyRound aria-hidden />New password</Button>
+          <Button size="lg" variant="outline" onClick={() => setDlg("kick")}><LogOut aria-hidden />Kick out</Button>
         </div>
-        {!login && (
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-warning/10 p-4 text-sm">
-            <span><b>Link this account to a player</b> to load, redeem and keep a history. Loads and cash outs are recorded against someone, so your numbers stay right.</span>
-            <Button onClick={() => setDlg("link")}><Link2 aria-hidden />Link to a player</Button>
-          </div>
-        )}
       </section>
 
       <Tabs defaultValue="activity" className="gap-4">
@@ -113,11 +109,11 @@ export function AccountWorkspace({ platform, username, onChanged, onCreate }: { 
         </TabsList>
 
         <TabsContent value="activity" className="grid gap-4">
-          {!login ? <p className="glass rounded-xl border p-6 text-center text-sm text-muted-foreground">Nothing recorded yet. Once this account is linked to a player, their loads, free play and cash outs show up here.</p> : (
+          {(
             <>
-              <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+              <div className={`grid grid-cols-2 gap-2 ${login ? "lg:grid-cols-4" : "lg:grid-cols-2"}`}>
                 <Stat label="Loaded to the game" value={money(hist?.totals.loaded)} /><Stat label="Redeemed from the game" value={money(hist?.totals.redeemed)} />
-                <Stat label="Paid by the player" value={money(hist?.totals.paid)} /><Stat label="Cashed out to them" value={money(hist?.totals.cashed_out)} />
+                {login && <><Stat label="Paid by the player" value={money(hist?.totals.paid)} /><Stat label="Cashed out to them" value={money(hist?.totals.cashed_out)} /></>}
               </div>
               {!hist ? <Skeleton className="h-40 rounded-xl" /> : !hist.activity.length ? <p className="glass rounded-xl border p-6 text-center text-sm text-muted-foreground">No loads or cash outs yet.</p> : (
                 <ol className="grid gap-2" aria-label="Activity, newest first">
@@ -141,7 +137,7 @@ export function AccountWorkspace({ platform, username, onChanged, onCreate }: { 
           )}
         </TabsContent>
 
-        <TabsContent value="transactions"><TransactionsTab platform={platform} username={res.username} linked={!!login} hist={hist} /></TabsContent>
+        <TabsContent value="transactions"><TransactionsTab platform={platform} username={res.username} hist={hist} /></TabsContent>
 
         <TabsContent value="details">
           <dl className="grid gap-2 sm:grid-cols-2">
@@ -157,8 +153,9 @@ export function AccountWorkspace({ platform, username, onChanged, onCreate }: { 
 
       {login && player && game && dlg === "load" && <LoadDialog player={player} game={game} login={login} api open onOpenChange={(o) => !o && setDlg(null)} onDone={refresh} />}
       {login && player && game && dlg === "redeem" && <RedeemDialog player={player} game={game} login={login} balance={balance} open onOpenChange={(o) => !o && setDlg(null)} onDone={refresh} />}
-      {login && dlg === "reset" && <ResetPasswordDialog login={login} open onOpenChange={(o) => !o && setDlg(null)} onDone={() => { history(); void lookup(); }} />}
-      {login && dlg === "kick" && <KickDialog login={login} open onOpenChange={(o) => !o && setDlg(null)} onDone={refresh} />}
+      {!login && (dlg === "load" || dlg === "redeem") && <DirectMoveDialog platform={platform} username={res.username} kind={dlg === "load" ? "load" : "withdraw"} balance={balance} open onOpenChange={(o) => !o && setDlg(null)} onDone={refresh} />}
+      {dlg === "reset" && <ResetPasswordDialog platformId={platform.id} username={res.username} open onOpenChange={(o) => !o && setDlg(null)} onDone={() => { history(); void lookup(); }} />}
+      {dlg === "kick" && <KickDialog platformId={platform.id} platformName={platform.name} username={res.username} open onOpenChange={(o) => !o && setDlg(null)} onDone={refresh} />}
       {!login && dlg === "link" && <LinkDialog platform={platform} username={res.username} open onOpenChange={(o) => !o && setDlg(null)} onLinked={() => { refresh(); }} />}
     </div>
   );

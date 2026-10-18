@@ -13,10 +13,9 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { apiFetch, errorText } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import type { PlatformLogin } from "@/lib/types";
 
 /** Set a new game password (suggested, editable) and show it afterwards so it can be sent to the player. */
-export function ResetPasswordDialog({ login, open, onOpenChange, onDone }: { login: PlatformLogin; open: boolean; onOpenChange: (o: boolean) => void; onDone: () => void }) {
+export function ResetPasswordDialog({ platformId, username, open, onOpenChange, onDone }: { platformId: number; username: string; open: boolean; onOpenChange: (o: boolean) => void; onDone: () => void }) {
   const { token } = useAuth();
   const [pw, setPw] = useState(() => genPassword());
   const [busy, setBusy] = useState(false);
@@ -26,14 +25,14 @@ export function ResetPasswordDialog({ login, open, onOpenChange, onDone }: { log
     e.preventDefault();
     if (pw.length < 6) { setError("At least 6 characters."); return; }
     setBusy(true); setError("");
-    try { await apiFetch("/admin/game-accounts/", { method: "POST", token, body: { action: "reset", login: login.id, password: pw } }); setDone(true); onDone(); }
+    try { await apiFetch(`/admin/platforms/${platformId}/account/`, { method: "POST", token, body: { action: "reset", username, password: pw } }); setDone(true); onDone(); }
     catch (err) { setError(errorText(err)); } finally { setBusy(false); }
   }
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!busy) { onOpenChange(o); if (!o) { setDone(false); setError(""); setPw(genPassword()); } } }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{done ? "Password changed" : `New game password for ${login.username}`}</DialogTitle>
+          <DialogTitle>{done ? "Password changed" : `New game password for ${username}`}</DialogTitle>
           <DialogDescription>{done ? "Send it to the player. They sign in to the game with it." : "Changes the password on the game platform right away."}</DialogDescription>
         </DialogHeader>
         {done ? (
@@ -58,19 +57,19 @@ export function ResetPasswordDialog({ login, open, onOpenChange, onDone }: { log
 }
 
 /** Force the player out of the game (ask first: they lose their current round). */
-export function KickDialog({ login, open, onOpenChange, onDone }: { login: PlatformLogin; open: boolean; onOpenChange: (o: boolean) => void; onDone: () => void }) {
+export function KickDialog({ platformId, platformName, username, open, onOpenChange, onDone }: { platformId: number; platformName: string; username: string; open: boolean; onOpenChange: (o: boolean) => void; onDone: () => void }) {
   const { token } = useAuth();
   const [busy, setBusy] = useState(false);
   async function kick() {
     setBusy(true);
-    try { await apiFetch("/admin/game-accounts/", { method: "POST", token, body: { action: "kick", login: login.id } }); toast.success(`${login.username} was kicked out of the game`); onDone(); onOpenChange(false); }
+    try { await apiFetch(`/admin/platforms/${platformId}/account/`, { method: "POST", token, body: { action: "kick", username } }); toast.success(`${username} was kicked out of the game`); onDone(); onOpenChange(false); }
     catch (e) { toast.error(errorText(e)); } finally { setBusy(false); }
   }
   return (
     <AlertDialog open={open} onOpenChange={(o) => !busy && onOpenChange(o)}>
       <AlertDialogContent>
-        <AlertDialogHeader><AlertDialogTitle>Kick {login.username} out of the game?</AlertDialogTitle>
-          <AlertDialogDescription>They&apos;re disconnected from {login.game_name} right away and can sign back in. Use it before loading or redeeming if the game says the player is in a round.</AlertDialogDescription></AlertDialogHeader>
+        <AlertDialogHeader><AlertDialogTitle>Kick {username} out of the game?</AlertDialogTitle>
+          <AlertDialogDescription>They&apos;re disconnected from {platformName} right away and can sign back in. Use it before loading or redeeming if the game says the player is in a round.</AlertDialogDescription></AlertDialogHeader>
         <AlertDialogFooter><AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
           <AlertDialogAction onClick={(e) => { e.preventDefault(); void kick(); }} disabled={busy}>{busy ? <Spinner aria-hidden /> : <LogOut aria-hidden />}Kick out</AlertDialogAction></AlertDialogFooter>
       </AlertDialogContent>

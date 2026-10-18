@@ -149,6 +149,7 @@ api = [
     path("admin/platforms/<int:pk>/create/", platforms.platform_create),
     path("admin/platforms/<int:pk>/link/", platforms.platform_link),
     path("admin/platforms/<int:pk>/accounts/", platforms.platform_accounts),
+    path("admin/platforms/<int:pk>/account/", platforms.platform_account_action),
     path("admin/platforms/<int:pk>/search/", platforms.platform_search),
     path("admin/platforms/<int:pk>/remote-history/", platforms.platform_remote_history),
     path("admin/platforms/<int:pk>/history/", platforms.platform_history),

@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 const when = (t: string) => { const d = new Date(t.replace(/\//g, "-").replace(" ", "T")); return Number.isNaN(d.getTime()) ? t : dateTime(d.toISOString()); };
 
 /** The game's own record of this account when it offers one; otherwise what we sent to the game. */
-export function TransactionsTab({ platform, username, linked, hist }: { platform: Platform; username: string; linked: boolean; hist: AccountHistory | null }) {
+export function TransactionsTab({ platform, username, hist }: { platform: Platform; username: string; hist: AccountHistory | null }) {
   const { token } = useAuth();
   const [remote, setRemote] = useState<RemoteHistory | null>(null);
   const [source, setSource] = useState<"game" | "site">("game");
@@ -63,7 +63,6 @@ export function TransactionsTab({ platform, username, linked, hist }: { platform
             </div>
           )
       ) : !remote ? <Skeleton className="h-40 rounded-xl" />
-        : !linked ? <p className="glass rounded-xl border p-6 text-center text-sm text-muted-foreground">We only record loads and redeems for accounts tied to a player. Link this account to start.</p>
         : !hist ? <Skeleton className="h-40 rounded-xl" />
         : !hist.transactions.length ? <p className="glass rounded-xl border p-6 text-center text-sm text-muted-foreground">No loads or redeems sent to {platform.name} from here yet.</p> : (
           <div className="glass overflow-x-auto rounded-xl border">

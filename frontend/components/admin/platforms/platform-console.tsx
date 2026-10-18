@@ -27,6 +27,7 @@ export function PlatformConsole() {
   const params = useSearchParams();
   const [platforms, setPlatforms] = useState<Platform[] | null>(null);
   const [account, setAccount] = useState<string | null>(null);
+  const [opened, setOpened] = useState(0); // bumps when an account is opened again (e.g. right after it was created), so it is looked up afresh
   const [creating, setCreating] = useState<string | null>(null); // prefilled login name while the dialog is open
   const [reloadKey, setReloadKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -94,7 +95,7 @@ export function PlatformConsole() {
 
             <div className="grid items-start gap-4 lg:grid-cols-[22rem_minmax(0,1fr)]">
               <AccountPanel platform={current} selected={account} reloadKey={reloadKey} onSelect={setAccount} onNew={() => setCreating("")} />
-              {account ? <AccountWorkspace key={`${current.id}:${account.toLowerCase()}`} platform={current} username={account} onChanged={changed} onCreate={(u) => setCreating(u)} /> : (
+              {account ? <AccountWorkspace key={`${current.id}:${account.toLowerCase()}:${opened}`} platform={current} username={account} onChanged={changed} onCreate={(u) => setCreating(u)} /> : (
                 <div className="glass grid min-h-72 place-content-center justify-items-center gap-3 rounded-2xl border p-8 text-center">
                   <span className="grid size-14 place-items-center rounded-full bg-primary/15 text-brand-text"><MousePointerClick className="size-7" aria-hidden /></span>
                   <h2 className="text-xl font-semibold">Pick an account</h2>
@@ -106,7 +107,7 @@ export function PlatformConsole() {
             <Dialog open={creating !== null} onOpenChange={(o) => !o && setCreating(null)}>
               <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
                 <DialogHeader><DialogTitle>New {current.name} account</DialogTitle><DialogDescription>Creates the account on {current.name} right now.</DialogDescription></DialogHeader>
-                {creating !== null && <CreateAccount bare key={`${current.id}:${creating}`} platform={current} prefill={creating} onCreated={changed} onOpen={(u) => { setCreating(null); setAccount(u); }} />}
+                {creating !== null && <CreateAccount bare key={`${current.id}:${creating}`} platform={current} prefill={creating} onCreated={changed} onOpen={(u) => { setCreating(null); setAccount(u); setOpened((n) => n + 1); }} />}
               </DialogContent>
             </Dialog>
           </>
