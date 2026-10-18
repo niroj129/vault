@@ -252,6 +252,22 @@ def redeem_freeplay(user, code, game, login):
     return dep
 
 
+def link_games(provider):
+    """Point unlinked games with the same name as this connection at it, so a new
+    connection works (points, loading) without a second trip to the games page.
+    Games already tied to another connection are left alone. Returns the names linked."""
+    from catalog.models import Game
+    norm = lambda t: "".join(c for c in (t or "").lower() if c.isalnum())  # noqa: E731
+    want = norm(provider.name)
+    if not want:
+        return []
+    games = [g for g in Game.objects.filter(provider__isnull=True) if norm(g.name) == want]
+    for g in games:
+        g.provider = provider
+        g.save(update_fields=["provider"])
+    return [g.name for g in games]
+
+
 def apply_agent_balance(provider, balance):
     """Games on an API-connected platform show that platform's live agent points."""
     from catalog.models import Game

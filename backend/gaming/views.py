@@ -598,6 +598,10 @@ class ProviderViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return GameProvider.objects.all()
 
+    def perform_create(self, ser):
+        provider = ser.save()
+        service.link_games(provider)
+
     @action(detail=False, methods=["get"])
     def kinds(self, request):
         return Response([{"value": k, "label": l, "fields": FIELDS[k]}

@@ -877,3 +877,24 @@ class FreePlayAndPointsTests(TestCase):
         with mock.patch("gaming.service.adapter_for", Bal):
             self.assertEqual(c.post("/api/admin/points/sync/").data, {"synced": 1})
         self.assertEqual(self.ann_c.post("/api/admin/points/sync/").status_code, 403)
+
+
+class ProviderLinkTests(TestCase):
+    """A new game-API connection links the game of the same name by itself."""
+
+    def test_new_connection_links_the_matching_game_only(self):
+        a = make_tenant("alpha", A, feature_payments=True)
+        make_user(a, "admin", role="admin")
+        with use_tenant(a):
+            fk = Game.objects.create(name="Fire Kirin")
+            other = Game.objects.create(name="Juwa")
+            taken = GameProvider.objects.create(name="Old", kind="ashx", base_url="https://x", agent_name="a")
+            tied = Game.objects.create(name="Game Vault", provider=taken)
+        c = client_for(A, "admin")
+        r = c.post("/api/game-providers/", {"name": "fire  KIRIN", "kind": "ashx", "base_url": "https://x", "agent_name": "a"}, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        c.post("/api/game-providers/", {"name": "Game Vault", "kind": "ashx", "base_url": "https://x", "agent_name": "a"}, format="json")
+        with use_tenant(a):
+            self.assertEqual(Game.objects.get(pk=fk.pk).provider.name, "fire  KIRIN")
+            self.assertIsNone(Game.objects.get(pk=other.pk).provider)        # different name: untouched
+            self.assertEqual(Game.objects.get(pk=tied.pk).provider_id, taken.id)  # already tied: untouched
