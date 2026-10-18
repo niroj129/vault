@@ -1,4 +1,4 @@
-# Deploying Tiffany Gaming (Docker Compose on a VPS)
+# Deploying the casino platform (Docker Compose on a VPS)
 
 The whole stack — **Next.js frontend + Django API + Postgres + nginx** — runs with one
 command. nginx serves the site and `/api` on the **same domain** (so there's no CORS to
@@ -81,6 +81,21 @@ docker compose up -d --build # after a code update
 
 ## 6. Add a domain + HTTPS (do this before real use)
 
+### Recommended — Caddy with automatic HTTPS for every client site
+`docker-compose.override.yml` swaps nginx for Caddy, which issues a Let's Encrypt
+certificate **on demand** for any domain that belongs to a site in the Platform
+panel (it asks Django at `/api/platform/domain-check/`). To sell a site:
+
+1. The client points their domain's **A record** at `YOUR_SERVER_IP`.
+2. You add the domain in **Platform → New site** (or Edit).
+3. The first visit to `https://theirdomain.com` gets a certificate automatically.
+
+Set `COOKIE_SECURE=1` in `.env`. Once every site has its domain added, set
+`TENANT_FALLBACK=0` so unknown hostnames get a 404 instead of your platform site.
+Websockets (`/ws/`) are proxied by both the Caddy and nginx configs; production
+runs Django under Daphne with Redis as the channel layer (both in `docker-compose.yml`).
+
+### Single domain alternatives
 Point an **A record** for your domain to `YOUR_SERVER_IP`. Then pick one:
 
 ### Option A — Cloudflare (easiest)

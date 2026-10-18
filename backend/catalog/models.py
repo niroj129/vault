@@ -1,11 +1,12 @@
 from django.conf import settings
 from django.db import models
 from django.utils.text import slugify
+from tenants.models import TenantModel
 
 
-class Category(models.Model):
-    name = models.CharField(max_length=80, unique=True)
-    slug = models.SlugField(max_length=90, unique=True, blank=True)
+class Category(TenantModel):
+    name = models.CharField(max_length=80)
+    slug = models.SlugField(max_length=90, blank=True)
     icon = models.CharField(max_length=40, default="dice",
                             help_text="Icon key used by the frontend")
     sort_order = models.PositiveIntegerField(default=0)
@@ -14,6 +15,7 @@ class Category(models.Model):
     class Meta:
         ordering = ["sort_order", "name"]
         verbose_name_plural = "Categories"
+        unique_together = [("tenant", "name"), ("tenant", "slug")]
 
     def save(self, *args, **kwargs):
         if not self.slug:
@@ -24,13 +26,13 @@ class Category(models.Model):
         return self.name
 
 
-class Game(models.Model):
+class Game(TenantModel):
     class Status(models.TextChoices):
         ACTIVE = "active", "Active"
         INACTIVE = "inactive", "Inactive"
 
     name = models.CharField(max_length=120)
-    slug = models.SlugField(max_length=140, unique=True, blank=True)
+    slug = models.SlugField(max_length=140, blank=True)
     category = models.ForeignKey(Category, null=True, blank=True,
                                  on_delete=models.SET_NULL, related_name="games")
     short_description = models.CharField(max_length=255, blank=True)
@@ -45,6 +47,15 @@ class Game(models.Model):
 
     # links
     play_url = models.URLField(blank=True)
+    # game platform API that runs this game (None = staff load by hand)
+    provider = models.ForeignKey("gaming.GameProvider", null=True, blank=True,
+                                 on_delete=models.SET_NULL, related_name="games")
+    provider_game_code = models.CharField(
+        max_length=40, blank=True, help_text="Game code on the platform "
+        "(e.g. kindId), optional")
+    self_serve = models.BooleanField(
+        default=True, help_text="Players can create an account and load this "
+        "game themselves")
     user_link = models.URLField(blank=True)
     agent_link = models.URLField(blank=True)
 
@@ -68,6 +79,7 @@ class Game(models.Model):
 
     class Meta:
         ordering = ["sort_order", "name"]
+        unique_together = [("tenant", "slug")]
 
     def save(self, *args, **kwargs):
         if not self.slug:
@@ -78,7 +90,7 @@ class Game(models.Model):
         return self.name
 
 
-class Screenshot(models.Model):
+class Screenshot(TenantModel):
     game = models.ForeignKey(Game, on_delete=models.CASCADE,
                              related_name="screenshots")
     image = models.ImageField(upload_to="games/shots/")
@@ -92,7 +104,7 @@ class Screenshot(models.Model):
         return f"Screenshot for {self.game.name}"
 
 
-class FAQ(models.Model):
+class FAQ(TenantModel):
     game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name="faqs")
     question = models.CharField(max_length=255)
     answer = models.TextField()
@@ -105,7 +117,7 @@ class FAQ(models.Model):
         return self.question
 
 
-class Review(models.Model):
+class Review(TenantModel):
     game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name="reviews")
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     rating = models.PositiveSmallIntegerField(default=5)
@@ -120,7 +132,7 @@ class Review(models.Model):
         return f"{self.user} → {self.game} ({self.rating})"
 
 
-class Favorite(models.Model):
+class Favorite(TenantModel):
     game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name="favorited_by")
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
                              related_name="favorites")
@@ -128,3 +140,28 @@ class Favorite(models.Model):
 
     class Meta:
         unique_together = ("game", "user")
+
+
+class GameLogin(TenantModel):
+    """A player's username/password for one game platform, set by staff and
+    shown in the player's Game logins vault."""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                             related_name="game_logins")
+    game = models.ForeignKey(Game, on_delete=models.CASCADE,
+                             related_name="logins")
+    username = models.CharField(max_length=120)
+    password = models.CharField(max_length=120, blank=True)
+    note = models.CharField(max_length=200, blank=True)
+    # the platform's own id for this account (needed by some APIs)
+    platform_user_id = models.CharField(max_length=64, blank=True)
+    created_via_api = models.BooleanField(default=False)
+    last_balance = models.CharField(max_length=40, blank=True)
+    last_balance_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = [("user", "game")]
+        ordering = ["game__name"]
+
+    def __str__(self):
+        return f"{self.user} @ {self.game}: {self.username}"

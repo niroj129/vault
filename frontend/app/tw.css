@@ -1,0 +1,243 @@
+/* Lucky Star design system: design-system/lucky-star-casino/MASTER.md
+   with the project decisions in design-system/lucky-star-casino/pages/_project-decisions.md.
+   Every colour is a semantic token, and each pair below was checked for WCAG AA in both themes. */
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* Night = .dark (default), Day = no class. next-themes sets the class. */
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-brand: var(--brand);
+  --color-brand-text: var(--brand-text);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-text: var(--destructive-text);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-surface: var(--surface);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* radius: MASTER buttons/inputs 8px, cards 12px, modals 16px */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-3xl: 24px;
+  --radius-4xl: 28px;
+
+  /* MASTER shadow depths (tuned for dark surfaces) */
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.08);
+  --shadow-md: 0 4px 12px rgb(0 0 0 / 0.14);
+  --shadow-lg: 0 10px 24px rgb(0 0 0 / 0.2);
+  --shadow-xl: 0 20px 40px rgb(0 0 0 / 0.28);
+  --shadow-glow: 0 8px 28px color-mix(in oklab, var(--primary) 38%, transparent);
+
+  /* type scale 12 14 16 18 24 32 40 48 (font-scale rule) */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 2rem;
+  --text-3xl: 2.5rem;
+  --text-4xl: 3rem;
+
+  /* motion tokens: 150–300ms, ease-out to enter, ease-in to exit */
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --animate-in-fast: enter 180ms var(--ease-out);
+
+  --breakpoint-xs: 23.4375rem; /* 375px */
+}
+
+/* z-index scale: dropdown 10, sticky 20, nav 30, overlay/modal 50, toast 60 (z-index-management rule) */
+/* payment-app brand dots (decorative; the name is always written next to them) */
+:root { --pay-ecashapp: #00D632; --pay-chime: #1EC677; --pay-venmo: #3D95CE; --pay-paypal: #2A5ECC; --pay-applepay: #A3A3A3; --pay-googlepay: #4285F4; --pay-zelle: #6D1ED4; }
+:root { --z-dropdown: 10; --z-sticky: 20; --z-nav: 30; --z-modal: 50; --z-toast: 60; }
+
+/* ---------- Day (light): paired with Night, same palette ---------- */
+:root {
+  color-scheme: light;
+  --background: #F5F3FF;
+  --foreground: #0F172A;
+  --surface: #FFFFFF;
+  --card: rgb(255 255 255 / 0.86);
+  --card-foreground: #0F172A;
+  --popover: #FFFFFF;
+  --popover-foreground: #0F172A;
+  --primary: #7C3AED;            /* CTA; the operator's brand colour overrides it */
+  --primary-foreground: #FFFFFF;
+  --brand: #4338CA;              /* MASTER primary: rings, secondary outlines */
+  --brand-text: #6D28D9;         /* brand colour used as text (≥4.5:1) */
+  --secondary: #EDE9FE;
+  --secondary-foreground: #3B0764;
+  --muted: #EDE9FE;
+  --muted-foreground: #475569;
+  --accent: #EDE9FE;
+  --accent-foreground: #0F172A;
+  --destructive: #B91C1C;
+  --destructive-foreground: #FFFFFF;
+  --destructive-text: #B91C1C;    /* red used as text (≥4.5:1) */
+  --success: #047857;
+  --warning: #92400E;
+  --info: #1D4ED8;
+  --border: #E2E8F0;
+  --input: #CBD5E1;
+  --ring: #4338CA;
+  --chart-1: #7C3AED;
+  --chart-2: #4338CA;
+  --chart-3: #047857;
+  --chart-4: #B45309;
+  --chart-5: #1D4ED8;
+  --radius: 12px;
+  --sidebar: rgb(255 255 255 / 0.8);
+  --sidebar-foreground: #0F172A;
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: #EDE9FE;
+  --sidebar-accent-foreground: #0F172A;
+  --sidebar-border: #E2E8F0;
+  --sidebar-ring: #4338CA;
+  --scrim: rgb(15 23 42 / 0.5);
+  --glass-blur: 16px;
+}
+
+/* ---------- Night (dark, default): MASTER palette ---------- */
+.dark {
+  color-scheme: dark;
+  --background: #0F172A;
+  --foreground: #F8FAFC;
+  --surface: #131936;
+  --card: rgb(21 28 54 / 0.82);
+  --card-foreground: #F8FAFC;
+  --popover: #151C36;
+  --popover-foreground: #F8FAFC;
+  --primary: #7C3AED;
+  --primary-foreground: #FFFFFF;
+  --brand: #6366F1;
+  --brand-text: #A78BFA;
+  --secondary: #1E2547;
+  --secondary-foreground: #F8FAFC;
+  --muted: #131936;
+  --muted-foreground: #A5AEC4;
+  --accent: #1E2547;
+  --accent-foreground: #F8FAFC;
+  --destructive: #DC2626;
+  --destructive-foreground: #FFFFFF;
+  --destructive-text: #F87171;
+  --success: #34D399;
+  --warning: #FBBF24;
+  --info: #60A5FA;
+  --border: rgb(255 255 255 / 0.08);
+  --input: rgb(255 255 255 / 0.14);
+  --ring: #818CF8;
+  --chart-1: #A78BFA;
+  --chart-2: #818CF8;
+  --chart-3: #34D399;
+  --chart-4: #FBBF24;
+  --chart-5: #60A5FA;
+  --sidebar: rgb(15 23 42 / 0.82);
+  --sidebar-foreground: #F8FAFC;
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: #1E2547;
+  --sidebar-accent-foreground: #F8FAFC;
+  --sidebar-border: rgb(255 255 255 / 0.08);
+  --sidebar-ring: #818CF8;
+  --scrim: rgb(2 6 23 / 0.6);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/60;
+  }
+  html {
+    @apply font-sans antialiased;
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-foreground text-base leading-normal;
+    min-height: 100dvh;
+    /* MASTER "Night indigo + dream violet": a soft aurora behind the glass */
+    background-image:
+      radial-gradient(60% 50% at 85% -10%, color-mix(in oklab, var(--primary) 22%, transparent), transparent 70%),
+      radial-gradient(50% 40% at -10% 30%, color-mix(in oklab, var(--brand) 16%, transparent), transparent 70%);
+    background-attachment: fixed;
+  }
+  h1, h2, h3, h4 {
+    @apply font-heading tracking-tight text-balance;
+  }
+  h1 { @apply font-bold; }
+  h2, h3 { @apply font-semibold; }
+  p { @apply text-pretty; }
+  /* readable-font-size: 16px inputs (also stops iOS zoom) */
+  input, select, textarea { font-size: max(16px, 1em); }
+  /* cursor-pointer on everything clickable (MASTER forbidden-pattern list) */
+  button:not(:disabled), [role="button"]:not([aria-disabled="true"]), a[href], summary, label[for], select { cursor: pointer; }
+  /* visible keyboard focus everywhere */
+  :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+  ::selection { background: color-mix(in oklab, var(--primary) 40%, transparent); }
+  /* touch: kill the 300ms delay and the grey flash */
+  a, button, [role="button"], label, summary { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+}
+
+@layer components {
+  /* glass surface: depth layer (see project decisions) */
+  .glass {
+    background: var(--card);
+    -webkit-backdrop-filter: blur(var(--glass-blur, 16px)) saturate(150%);
+    backdrop-filter: blur(var(--glass-blur, 16px)) saturate(150%);
+  }
+  /* invisible 44px tap area around small icon buttons (touch-target rule) */
+  .hit-44 { position: relative; }
+  .hit-44::after { content: ""; position: absolute; inset: 50% auto auto 50%; width: max(100%, 44px); height: max(100%, 44px); transform: translate(-50%, -50%); }
+  .scrollbar-none { scrollbar-width: none; }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

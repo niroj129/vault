@@ -7,6 +7,7 @@ frontend/.env.local
 __pycache__/
 *.pyc
 backend/db.sqlite3
+backend/.vapid.json
 backend/media/
 backend/staticfiles/
 
@@ -22,3 +23,6 @@ vault.db
 *.log
 .claude/
 __pycache__/
+
+# build caches
+*.tsbuildinfo

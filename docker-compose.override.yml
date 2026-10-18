@@ -1,0 +1,17 @@
+# Auto-loaded by `docker compose`. Turns the proxy into Caddy for automatic
+# HTTPS (Let's Encrypt) — used when serving on a real domain.
+services:
+  nginx:
+    image: caddy:2-alpine
+    ports:
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - media:/srv/media:ro
+      - static:/srv/static:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

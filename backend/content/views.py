@@ -13,17 +13,18 @@ import urllib.parse
 import urllib.request
 
 from accounts.permissions import IsAdminOrReadOnly, IsAdminRole
+from gaming import bytepayout
 from catalog.models import Category, Game
 from .models import (Announcement, BusinessInfo, Cashout, ContactMessage,
                      DailyProfit, Notification, PaymentMethod, Promo, SEOPage,
-                     SiteFAQ, SiteSettings, Transaction, Wallet, Winner)
+                     SiteFAQ, SiteSettings, Transaction, Winner)
 from .serializers import (AnnouncementSerializer, BusinessInfoSerializer,
                           CashoutSerializer, ContactMessageSerializer,
                           DailyProfitSerializer, NotificationSerializer,
                           PaymentMethodSerializer, PromoSerializer,
                           SEOPageSerializer, SiteFAQSerializer,
                           SiteSettingsSerializer, TransactionSerializer,
-                          WalletSerializer, WinnerSerializer)
+                          WinnerSerializer)
 
 
 class WinnerViewSet(viewsets.ModelViewSet):
@@ -89,11 +90,39 @@ class CashoutViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminRole]
 
 
+def _owner_chat_unread():
+    from tenants.context import get_current_tenant
+    from tenants.ownerchat import site_unread
+    t = get_current_tenant()
+    return site_unread(t) if t and not t.is_platform else 0
+
+
+def _unmatched_emails():
+    """Payment emails no QR payment could be matched to (sidebar badge)."""
+    from mailin.models import InboundEmail
+    return InboundEmail.objects.filter(kind="payment", match="none", archived=False).count()
+
+
 class SiteSettingsView(APIView):
     permission_classes = [IsAdminOrReadOnly]
 
+    # Safe for anyone to read; everything else (API keys, tokens) is admin-only.
+    PUBLIC_FIELDS = {"site_name", "tagline", "logo", "favicon",
+                     "social_preview", "color_primary", "color_secondary",
+                     "color_accent", "currency", "signup_url",
+                     "maintenance_mode", "analytics_id", "gsc_verification",
+                     "allow_signup", "redeem_enabled",
+                     "bp_methods", "load_bonus_percent"}
+
     def get(self, request):
-        return Response(SiteSettingsSerializer(SiteSettings.load()).data)
+        data = SiteSettingsSerializer(SiteSettings.load()).data
+        if not (request.user.is_authenticated and request.user.is_admin_role):
+            data = {k: v for k, v in data.items() if k in self.PUBLIC_FIELDS}
+        tenant = getattr(request, "tenant", None)
+        if tenant:
+            data["features"] = tenant.features
+            data["is_platform"] = tenant.is_platform
+        return Response(data)
 
     def put(self, request):
         obj = SiteSettings.load()
@@ -102,8 +131,7 @@ class SiteSettingsView(APIView):
         if data.get("game_api_force_ip") in ("", None):
             data["game_api_force_ip"] = None
         # empty numeric fields -> skip (partial update keeps current value)
-        for k in ("points_threshold", "load_amount", "pay_min_amount",
-                  "pay_max_amount"):
+        for k in ("points_threshold", "load_amount", "load_bonus_percent", "redeem_min"):
             if k in data and str(data[k]).strip() == "":
                 data.pop(k)
         ser = SiteSettingsSerializer(obj, data=data, partial=True)
@@ -197,6 +225,8 @@ def admin_stats(request):
         "today_cashout": today_cashout,
         "low_points": low_points,
         "unread_chats": _unread_chat_count(),
+        **_messenger_numbers(),
+        **_payment_numbers(),
         "latest_winner": (WinnerSerializer(Winner.objects.first()).data
                           if Winner.objects.exists() else None),
         "trend": trend,
@@ -206,6 +236,78 @@ def admin_stats(request):
 def _unread_chat_count():
     from chat.models import Message
     return Message.objects.filter(recipient__role="admin", is_read=False).count()
+
+
+def _messenger_numbers():
+    """Online players, support chats waiting on staff, open reports."""
+    from accounts.models import User
+    from chat import presence
+    from chat.models import ChatMessage, Conversation, Report
+    from django.db.models import Max, Q
+    players = list(User.objects.filter(role="user", is_active=True)
+                   .values_list("id", flat=True))
+    convs = list(Conversation.objects.filter(kind="support").annotate(
+        last=Max("messages__id", filter=~Q(messages__kind="system")))
+        .exclude(last=None).values_list("subject_id", "last"))
+    senders = dict(ChatMessage.objects.filter(id__in=[l for _, l in convs])
+                   .values_list("id", "sender_id"))
+    return {
+        "online_now": len(presence.online_ids(players)),
+        "unanswered_chats": sum(1 for subj, l in convs
+                                if senders.get(l) == subj),
+        "open_reports": Report.objects.filter(status="open").count(),
+        "messages_today": ChatMessage.objects.filter(
+            created_at__date=timezone.localdate()).exclude(
+            kind="system").count(),
+    }
+
+
+def _payment_numbers():
+    from gaming.models import Deposit, Redeem
+    paid = Deposit.objects.filter(status="approved")
+    today = timezone.localdate()
+    return {
+        "deposits_needing_staff": paid.filter(load_status__in=["failed", "manual"]).count()
+        + Deposit.objects.filter(status="pending", gateway="direct").count(),
+        "deposits_to_check": Deposit.objects.filter(status="pending", gateway="direct").count(),
+        "redeems_waiting": Redeem.objects.filter(status="pending").count(),
+        "emails_unmatched": _unmatched_emails(),
+        "owner_chat_unread": _owner_chat_unread(),
+        "deposits_today": float(paid.filter(approved_at__date=today)
+                                .aggregate(s=Sum("amount"))["s"] or 0),
+    }
+
+
+@api_view(["GET"])
+@permission_classes([IsAdminRole])
+def admin_setup(request):
+    """The admin dashboard's "finish setting up" checklist."""
+    from accounts.models import User
+    from .models import Promo
+    st = SiteSettings.load()
+    steps = [
+        {"key": "brand", "title": "Add your name and logo",
+         "hint": "Players see it on every page.",
+         "done": bool(st.logo) or st.site_name not in ("", "My Casino"),
+         "href": "/admin/settings"},
+        {"key": "games", "title": "Add your games",
+         "hint": "With art and the player link for each.",
+         "done": Game.objects.exists(), "href": "/admin/games"},
+        {"key": "staff", "title": "Add a staff member",
+         "hint": "Someone to answer chats when you're away.",
+         "done": User.objects.filter(role__in=["admin", "agent"]).count() > 1,
+         "href": "/admin/players"},
+        {"key": "payments", "title": "Turn on payments",
+         "hint": "Add your BytePayout key and webhook.",
+         "done": bool(bytepayout.credentials(st)[0] and bytepayout.credentials(st)[2]),
+         "href": "/admin/deposits"},
+        {"key": "promo", "title": "Post your first promotion",
+         "hint": "A welcome offer brings people back.",
+         "done": Promo.objects.exists(), "href": "/admin/promotions"},
+    ]
+    return Response({"steps": steps,
+                     "done": sum(s["done"] for s in steps),
+                     "total": len(steps)})
 
 
 @api_view(["GET"])
@@ -290,50 +392,15 @@ class NotificationViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         return Response({"ok": True})
 
 
-class WalletMeView(APIView):
-    permission_classes = [IsAuthenticatedPerm]
-
-    def get(self, request):
-        wallet, _ = Wallet.objects.get_or_create(user=request.user)
-        txns = Transaction.objects.filter(user=request.user)[:50]
-        return Response({"balance": wallet.balance,
-                         "transactions": TransactionSerializer(txns, many=True).data})
-
-
-@api_view(["POST"])
-@permission_classes([IsAdminRole])
-def wallet_adjust(request):
-    """Admin credits/debits a player's wallet and logs a transaction."""
-    from accounts.models import User
-    user = User.objects.filter(pk=request.data.get("user")).first()
-    if not user:
-        return Response({"detail": "User not found."}, status=404)
-    try:
-        amount = float(request.data.get("amount"))
-    except (TypeError, ValueError):
-        return Response({"detail": "Invalid amount."}, status=400)
-    kind = request.data.get("kind", "adjust")
-    wallet, _ = Wallet.objects.get_or_create(user=user)
-    wallet.balance = float(wallet.balance) + amount
-    wallet.save()
-    Transaction.objects.create(user=user, amount=amount, kind=kind,
-                               note=request.data.get("note", ""))
-    # award loyalty points on positive loads / bonuses
-    if amount > 0 and kind in ("load", "bonus"):
-        user.loyalty_points = (user.loyalty_points or 0) + int(amount // 10)
-        user.save(update_fields=["loyalty_points"])
-    Notification.objects.create(
-        user=user, text=f"💰 Wallet {'credited' if amount >= 0 else 'debited'} "
-        f"{abs(amount):g}", link="/dashboard")
-    return Response({"balance": wallet.balance, "loyalty_points": user.loyalty_points})
-
-
 @api_view(["GET"])
 @permission_classes([IsAdminRole])
 def top_games(request):
-    rows = Game.objects.order_by("-clicks", "-views")[:10]
+    rows = Game.objects.select_related("category").order_by("-clicks", "-views")[:10]
     return Response([{"name": g.name, "slug": g.slug, "clicks": g.clicks,
-                      "views": g.views} for g in rows])
+                      "views": g.views, "status": g.status,
+                      "thumbnail": g.thumbnail.url if g.thumbnail else None,
+                      "category": g.category.name if g.category_id else ""}
+                     for g in rows])
 
 
 @api_view(["GET"])
@@ -417,29 +484,20 @@ def cashout_request(request):
 @api_view(["GET"])
 @permission_classes([IsAdminRole])
 def settlement_report(request):
-    """All-time ledger settlement: totals by kind + net + per-player balances."""
+    """All-time ledger settlement: totals by kind, cash outs and profit."""
     from accounts.models import User
     totals = {}
     for k in ["load", "cashout", "bonus", "adjust"]:
         totals[k] = float(Transaction.objects.filter(kind=k).aggregate(
             s=Sum("amount"))["s"] or 0)
-    total_balance = float(Wallet.objects.aggregate(s=Sum("balance"))["s"] or 0)
     all_cashouts = float(Cashout.objects.aggregate(s=Sum("amount"))["s"] or 0)
     pending = float(Cashout.objects.filter(status="pending").aggregate(
         s=Sum("amount"))["s"] or 0)
-    players = []
-    for w in Wallet.objects.select_related("user"):
-        players.append({"player": w.user.username, "balance": float(w.balance),
-                        "loyalty": w.user.loyalty_points,
-                        "tier": w.user.vip_tier})
-    players.sort(key=lambda x: x["balance"], reverse=True)
     return Response({
         "totals": totals,
-        "net_liability": total_balance,
         "all_time_cashouts": all_cashouts,
         "pending_cashouts": pending,
         "total_profit": float(_profit_between()),
-        "players": players,
     })
 
 

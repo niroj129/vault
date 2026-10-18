@@ -2,7 +2,7 @@ from django.contrib import admin
 
 from .models import (Announcement, BusinessInfo, Cashout, ContactMessage,
                      DailyProfit, GameTxn, Notification, PaymentMethod, Promo,
-                     SEOPage, SiteFAQ, SiteSettings, Transaction, Wallet, Winner)
+                     SEOPage, SiteFAQ, SiteSettings, Transaction, Winner)
 
 
 @admin.register(Winner)
@@ -74,11 +74,10 @@ class GameTxnAdmin(admin.ModelAdmin):
     search_fields = ("account_name", "platform_user_id", "order_id")
 
 
-admin.site.register(Wallet)
 admin.site.register(Notification)
 admin.site.register(SiteSettings)
 admin.site.register(BusinessInfo)
 
-admin.site.site_header = "Tiffany Gaming — Admin"
-admin.site.site_title = "Tiffany Gaming Admin"
+admin.site.site_header = "Casino Admin"
+admin.site.site_title = "Casino Admin"
 admin.site.index_title = "Management Dashboard"

@@ -53,6 +53,7 @@ class GameListSerializer(RatingMixin, serializers.ModelSerializer):
     rating_avg = serializers.SerializerMethodField()
     rating_count = serializers.SerializerMethodField()
     is_favorited = serializers.SerializerMethodField()
+    provider_name = serializers.CharField(source="provider.name", default="", read_only=True)
 
     class Meta:
         model = Game
@@ -60,7 +61,8 @@ class GameListSerializer(RatingMixin, serializers.ModelSerializer):
                   "short_description", "thumbnail", "logo", "status", "featured",
                   "is_new", "clicks", "views", "features_list",
                   "sub_points", "vendor_points", "user_link", "agent_link",
-                  "rating_avg", "rating_count", "is_favorited"]
+                  "rating_avg", "rating_count", "is_favorited",
+                  "provider", "provider_name", "self_serve"]
 
     def get_features_list(self, obj):
         return [f for f in obj.features.splitlines() if f.strip()]
@@ -78,6 +80,7 @@ class GameDetailSerializer(RatingMixin, serializers.ModelSerializer):
     rating_avg = serializers.SerializerMethodField()
     rating_count = serializers.SerializerMethodField()
     is_favorited = serializers.SerializerMethodField()
+    provider_name = serializers.CharField(source="provider.name", default="", read_only=True)
 
     class Meta:
         model = Game
@@ -88,7 +91,8 @@ class GameDetailSerializer(RatingMixin, serializers.ModelSerializer):
                   "meta_description", "meta_keywords", "status", "featured",
                   "is_new", "clicks", "views", "sub_points", "vendor_points",
                   "combined_points", "rating_avg", "rating_count",
-                  "is_favorited", "screenshots", "faqs", "created_at"]
+                  "is_favorited", "screenshots", "faqs", "created_at",
+                  "provider", "provider_name", "provider_game_code", "self_serve"]
 
     combined_points = serializers.SerializerMethodField()
 

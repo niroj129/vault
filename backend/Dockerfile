@@ -19,5 +19,6 @@ RUN chmod +x entrypoint.sh
 
 EXPOSE 8000
 ENTRYPOINT ["./entrypoint.sh"]
-CMD ["gunicorn", "casino_backend.wsgi:application", \
-     "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "60"]
+# ASGI: serves HTTP and the messenger websockets (/ws/)
+CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "--proxy-headers", \
+     "casino_backend.asgi:application"]

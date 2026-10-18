@@ -1,4 +1,4 @@
-"""Django settings for Team Tiffany Gaming Casino — DRF backend."""
+"""Django settings for the white-label multi-tenant casino — DRF backend."""
 
 import os
 from datetime import timedelta
@@ -11,6 +11,7 @@ DEBUG = os.environ.get("DEBUG", "1") == "1"
 ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "*").split(",")
 
 INSTALLED_APPS = [
+    "daphne",  # ASGI runserver (websockets)
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -21,18 +22,23 @@ INSTALLED_APPS = [
     "rest_framework",
     "knox",
     "corsheaders",
+    "channels",
     # local
+    "tenants",
     "accounts",
     "catalog",
     "content",
     "chat",
+    "gaming",
     "payments",
+    "mailin",
 ]
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    "tenants.middleware.TenantMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -108,7 +114,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # ---- DRF + Knox token auth ----
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "knox.auth.TokenAuthentication",
+        "tenants.auth.TenantTokenAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
@@ -151,4 +157,28 @@ EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "1") == "1"
 EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
 DEFAULT_FROM_EMAIL = os.environ.get(
-    "DEFAULT_FROM_EMAIL", "Tiffany Gaming <no-reply@tiffany.gg>")
+    "DEFAULT_FROM_EMAIL", "Casino <no-reply@example.com>")
+
+# ---- Multi-tenancy ----
+# Unknown hostnames (localhost, bare server IP) serve the platform tenant.
+TENANT_FALLBACK = os.environ.get("TENANT_FALLBACK", "1") == "1"
+
+# ---- Websockets (Django Channels) ----
+ASGI_APPLICATION = "casino_backend.asgi.application"
+if os.environ.get("REDIS_URL"):
+    CHANNEL_LAYERS = {"default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {"hosts": [os.environ["REDIS_URL"]]},
+    }}
+    # shared cache so presence (who's online) is the same on every worker
+    CACHES = {"default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": os.environ["REDIS_URL"],
+    }}
+else:  # single process (dev)
+    CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+# Web Push (chat.push); generated into BASE_DIR/.vapid.json when unset
+VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
+VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
+AUTHENTICATION_BACKENDS = ["tenants.backends.TenantModelBackend"]
+SILENCED_SYSTEM_CHECKS = ["auth.W004"]  # usernames are unique per tenant

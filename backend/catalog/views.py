@@ -1,12 +1,13 @@
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework import mixins, viewsets
-from rest_framework.decorators import action
+from rest_framework import serializers
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from accounts.permissions import IsAdminOrReadOnly, IsAdminRole
-from .models import Category, Favorite, Game, Review
+from accounts.permissions import IsAdminOrAgent, IsAdminOrReadOnly, IsAdminRole
+from .models import Category, Favorite, Game, GameLogin, Review
 from .serializers import (CategorySerializer, FavoriteSerializer,
                           GameDetailSerializer, GameListSerializer,
                           ReviewSerializer)
@@ -114,3 +115,56 @@ class FavoriteViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
             return Response({"favorited": False})
         Favorite.objects.create(user=request.user, game=game)
         return Response({"favorited": True})
+
+
+# ------------------------------------------------------- game logins vault
+
+class GameLoginSerializer(serializers.ModelSerializer):
+    game_name = serializers.CharField(source="game.name", read_only=True)
+
+    class Meta:
+        model = GameLogin
+        fields = ["id", "user", "game", "game_name", "username", "password",
+                  "note", "updated_at"]
+
+    def validate_user(self, user):
+        me = self.context["request"].user
+        if not me.is_admin_role and user.agent_id != me.id:
+            raise serializers.ValidationError("Not one of your players.")
+        return user
+
+
+class GameLoginViewSet(viewsets.ModelViewSet):
+    """Staff set each player's username/password per game (?user=<id>).
+    Agents only see their own players."""
+    serializer_class = GameLoginSerializer
+    permission_classes = [IsAdminOrAgent]
+
+    def get_queryset(self):
+        qs = GameLogin.objects.select_related("game", "user")
+        me = self.request.user
+        if not me.is_admin_role:
+            qs = qs.filter(user__agent=me)
+        user = self.request.query_params.get("user")
+        if user and user.isdigit():
+            qs = qs.filter(user_id=int(user))
+        return qs
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_game_logins(request):
+    """The signed-in player's vault, with each game's art and play link."""
+    rows = GameLogin.objects.filter(user=request.user).select_related("game")
+    out = []
+    for g in rows:
+        game = g.game
+        out.append({
+            "id": g.id, "username": g.username, "password": g.password,
+            "note": g.note, "updated_at": g.updated_at,
+            "game": {"id": game.id, "name": game.name, "slug": game.slug,
+                     "thumbnail": game.thumbnail.url if game.thumbnail else None,
+                     "logo": game.logo.url if game.logo else None,
+                     "play_url": game.user_link or game.play_url},
+        })
+    return Response(out)

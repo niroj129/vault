@@ -4,7 +4,7 @@ from casino_backend.fields import RelativeImageField
 
 from .models import (Announcement, BusinessInfo, Cashout, ContactMessage,
                      DailyProfit, GameTxn, Notification, PaymentMethod, Promo,
-                     SEOPage, SiteFAQ, SiteSettings, Transaction, Wallet, Winner)
+                     SEOPage, SiteFAQ, SiteSettings, Transaction, Winner)
 
 
 class WinnerSerializer(serializers.ModelSerializer):
@@ -37,6 +37,16 @@ class SiteSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = SiteSettings
         exclude = ["id"]
+        read_only_fields = ["inbound_mail_token", "sendblue_token"]  # changed only through their setup pages
+
+    def validate(self, data):
+        lo = data.get("cashout_min_x", getattr(self.instance, "cashout_min_x", 3))
+        hi = data.get("cashout_max_x", getattr(self.instance, "cashout_max_x", 10))
+        if lo is not None and lo <= 0:
+            raise serializers.ValidationError({"cashout_min_x": "Must be more than 0."})
+        if lo is not None and hi is not None and hi < lo:
+            raise serializers.ValidationError({"cashout_max_x": "Must be at least the minimum."})
+        return data
 
 
 class BusinessInfoSerializer(serializers.ModelSerializer):
@@ -71,12 +81,6 @@ class SEOPageSerializer(serializers.ModelSerializer):
         model = SEOPage
         fields = ["id", "page", "title", "description", "keywords", "canonical",
                   "og_image", "robots"]
-
-
-class WalletSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Wallet
-        fields = ["balance"]
 
 
 class TransactionSerializer(serializers.ModelSerializer):

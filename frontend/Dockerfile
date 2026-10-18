@@ -2,11 +2,10 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Public base URL is inlined into the client bundle at build time.
-ARG NEXT_PUBLIC_API_URL=http://localhost
-ARG NEXT_PUBLIC_SITE_URL=http://localhost
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
-    NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL \
+# One build serves every tenant domain: the browser uses relative /api URLs.
+# The Django address is baked into the /api rewrites (next.config.js).
+ARG INTERNAL_API_URL=http://backend:8000
+ENV INTERNAL_API_URL=$INTERNAL_API_URL \
     NEXT_TELEMETRY_DISABLED=1
 
 COPY package.json package-lock.json* ./

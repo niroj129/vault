@@ -14,19 +14,31 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
   backend:
     build: ./backend
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
     environment:
+      REDIS_URL: redis://redis:6379/0
+      # unknown domains show the platform site (set 0 once all client
+      # domains are added in the Platform panel)
+      TENANT_FALLBACK: ${TENANT_FALLBACK:-1}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       DEBUG: "0"
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-*}
       DATABASE_URL: postgres://${POSTGRES_USER:-tiffany}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-tiffany}
       CORS_ORIGINS: ${PUBLIC_URL}
-      CSRF_TRUSTED_ORIGINS: ${PUBLIC_URL}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-${PUBLIC_URL}}
       COOKIE_SECURE: ${COOKIE_SECURE:-0}
       SEED: ${SEED:-1}
     volumes:
@@ -39,12 +51,30 @@ services:
       retries: 12
       start_period: 45s   # allow first-boot migrate + seed (image generation)
 
+  # payment safety net: checks pending BytePayout deposits and finishes
+  # stuck game loads every 2 minutes (in case a webhook is missed)
+  worker:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    entrypoint: ["sh", "-c", "while true; do python manage.py sync_deposits; sleep 120; done"]
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      DEBUG: "0"
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
+      DATABASE_URL: postgres://${POSTGRES_USER:-tiffany}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-tiffany}
+    volumes:
+      - media:/app/media
+
   frontend:
     build:
       context: ./frontend
       args:
-        NEXT_PUBLIC_API_URL: ${PUBLIC_URL}
-        NEXT_PUBLIC_SITE_URL: ${PUBLIC_URL}
+        # the site is served on many tenant domains: the browser calls the API
+        # on whatever domain it is on, so no public URL is baked into the build
+        INTERNAL_API_URL: http://backend:8000
     restart: unless-stopped
     environment:
       # server-side rendering reaches the backend directly (media stays public)

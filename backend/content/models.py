@@ -1,8 +1,9 @@
 from django.conf import settings
 from django.db import models
+from tenants.models import TenantModel
 
 
-class Winner(models.Model):
+class Winner(TenantModel):
     name = models.CharField(max_length=120)
     amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     game = models.CharField(max_length=120, blank=True)
@@ -17,20 +18,21 @@ class Winner(models.Model):
         return f"{self.name} — {self.amount}"
 
 
-class DailyProfit(models.Model):
-    date = models.DateField(unique=True)
+class DailyProfit(TenantModel):
+    date = models.DateField()
     amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     notes = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-date"]
+        unique_together = [("tenant", "date")]
 
     def __str__(self):
         return f"{self.date}: {self.amount}"
 
 
-class Announcement(models.Model):
+class Announcement(TenantModel):
     title = models.CharField(max_length=200)
     body = models.TextField(blank=True)
     pinned = models.BooleanField(default=False)
@@ -45,35 +47,41 @@ class Announcement(models.Model):
         return self.title
 
 
-class SingletonModel(models.Model):
-    """Base for one-row config models."""
+class SingletonModel(TenantModel):
+    """Base for one-row-per-tenant config models."""
     class Meta:
         abstract = True
 
     def save(self, *args, **kwargs):
-        self.pk = 1
+        if self.pk is None:  # never create a second row for a tenant
+            existing = type(self).objects.first()
+            if existing:
+                self.pk = existing.pk
         super().save(*args, **kwargs)
 
     @classmethod
     def load(cls):
-        obj, _ = cls.objects.get_or_create(pk=1)
+        obj = cls.objects.first()
+        if obj is None:
+            obj = cls()
+            obj.save()
         return obj
 
 
 class SiteSettings(SingletonModel):
-    site_name = models.CharField(max_length=120, default="Team Tiffany Gaming Casino")
+    site_name = models.CharField(max_length=120, default="My Casino")
     tagline = models.CharField(max_length=200, default="Play Premium. Win Big.")
     logo = models.ImageField(upload_to="site/", blank=True, null=True)
     favicon = models.ImageField(upload_to="site/", blank=True, null=True)
     social_preview = models.ImageField(upload_to="site/", blank=True, null=True)
-    color_primary = models.CharField(max_length=9, default="#0B0F1A")
-    color_secondary = models.CharField(max_length=9, default="#7C3AED")
-    color_accent = models.CharField(max_length=9, default="#F5C542")
+    color_primary = models.CharField(max_length=9, default="#0B0920")
+    color_secondary = models.CharField(max_length=9, default="#A996FF")
+    color_accent = models.CharField(max_length=9, default="#7B61FF")
     currency = models.CharField(max_length=5, default="$")
     # Where "Create Account" buttons redirect (Facebook / signup page)
     signup_url = models.URLField(
         blank=True,
-        default="https://www.facebook.com/profile.php?id=61572215053137")
+        default="")
     maintenance_mode = models.BooleanField(default=False)
     analytics_id = models.CharField(max_length=40, blank=True)
     gsc_verification = models.CharField(max_length=120, blank=True)
@@ -86,6 +94,14 @@ class SiteSettings(SingletonModel):
     twilio_sid = models.CharField(max_length=80, blank=True)
     twilio_token = models.CharField(max_length=80, blank=True)
     twilio_from = models.CharField(max_length=30, blank=True)
+    # Sendblue (iMessage, falling back to RCS/SMS on Android)
+    sendblue_key_id = models.CharField(max_length=80, blank=True)
+    sendblue_secret = models.CharField(max_length=120, blank=True)
+    sendblue_from = models.CharField(max_length=30, blank=True, help_text="Your Sendblue line (E.164)")
+    sendblue_token = models.CharField(max_length=64, blank=True, help_text="Secret part of this site's Sendblue webhook address")
+    twilio_whatsapp_from = models.CharField(
+        max_length=30, blank=True,
+        help_text="Your WhatsApp-enabled Twilio number (E.164, no whatsapp: prefix). The sandbox number works for testing")
     # External game-platform agent API (see API-Documentation.pdf)
     game_api_url = models.CharField(max_length=200, blank=True,
                                     help_text="Base URL, e.g. https://host (no trailing /api)")
@@ -97,19 +113,48 @@ class SiteSettings(SingletonModel):
         "bypass ISP DNS blocking")
     game_api_force_ip = models.GenericIPAddressField(
         null=True, blank=True, help_text="Optional: pin the API host to this IP")
-    # Payment gateway (shared merchant credentials)
-    pay_api_url = models.CharField(max_length=200, blank=True,
-                                   help_text="Gateway base URL, e.g. https://host")
-    pay_mch_no = models.CharField(max_length=40, blank=True)
-    pay_api_key = models.CharField(max_length=120, blank=True)
-    pay_sign_type = models.CharField(max_length=10, default="MD5")
-    pay_currency = models.CharField(max_length=8, default="usd")
-    pay_enabled_waycodes = models.CharField(
-        max_length=200, default="cashapp,zelle,paypal,card,chime")
-    pay_transfer_waycodes = models.CharField(
-        max_length=200, default="ecashapp,paypal,venmo,zelle,chime,card,ach")
-    pay_min_amount = models.PositiveIntegerField(default=0, help_text="Cents, 0=none")
-    pay_max_amount = models.PositiveIntegerField(default=0, help_text="Cents, 0=none")
+    # BytePayout (player deposits → automatic game loads)
+    bp_base_url = models.CharField(
+        max_length=200, default="https://mch.bytepayout.com/api/public/v1")
+    bp_api_key = models.CharField(max_length=200, blank=True)
+    bp_webhook_secret = models.CharField(max_length=200, blank=True)
+    bp_methods = models.CharField(
+        max_length=200, default="ecashapp,applepay,googlepay,chime,venmo,paypal",
+        help_text="Payment methods players can choose")
+    auto_load = models.BooleanField(
+        default=True, help_text="Load the game automatically once paid")
+    load_bonus_percent = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0,
+        help_text="Extra credits on every deposit, e.g. 10 = +10%")
+    load_minus_fee = models.BooleanField(
+        default=False, help_text="Load the amount minus the gateway fee")
+    # players
+    allow_signup = models.BooleanField(
+        default=True, help_text="New players can create their own account")
+    redeem_enabled = models.BooleanField(default=True)
+    redeem_min = models.PositiveIntegerField(default=20)
+    redeem_proof = models.CharField(
+        max_length=10, default="optional",
+        choices=[("required", "Required"), ("optional", "Optional"), ("off", "Don't ask")],
+        help_text="Ask players to attach a screenshot (e.g. their game balance) with a cash-out request")
+    redeem_methods = models.CharField(
+        max_length=200, default="cashapp,chime,venmo,paypal,zelle")
+    # forwarded emails (Gmail → Postmark/Mailgun/SendGrid/CloudMailin → /api/mail/inbound/<token>/)
+    inbound_mail_token = models.CharField(max_length=64, blank=True,
+                                          help_text="Secret part of this site's incoming-mail webhook address")
+    mailgun_signing_key = models.CharField(max_length=200, blank=True,
+                                           help_text="Optional: Mailgun webhook signing key, to check each post")
+    # cash-out rule: each cash out must be between min× and max× the player's last load on that game
+    cashout_rule_enabled = models.BooleanField(
+        default=True, help_text="Limit each cash out to a multiple of the player's last load")
+    cashout_min_x = models.DecimalField(
+        max_digits=5, decimal_places=2, default=3, help_text="Minimum cash out = this × the load")
+    cashout_max_x = models.DecimalField(
+        max_digits=5, decimal_places=2, default=10, help_text="Maximum cash out = this × the load")
+    cashout_basis = models.CharField(
+        max_length=10, default="loaded",
+        choices=[("loaded", "Credits loaded"), ("deposit", "Money paid")],
+        help_text="Multiply what staff loaded, or what the player paid")
 
     def __str__(self):
         return "Site Settings"
@@ -119,8 +164,8 @@ class SiteSettings(SingletonModel):
 
 
 class BusinessInfo(SingletonModel):
-    business_name = models.CharField(max_length=150, default="Team Tiffany Gaming")
-    email = models.EmailField(default="support@teamtiffany.gg")
+    business_name = models.CharField(max_length=150, default="My Casino")
+    email = models.EmailField(default="support@example.com")
     phone = models.CharField(max_length=40, default="+1 (555) 013-8888")
     whatsapp = models.CharField(max_length=40, blank=True)
     telegram = models.URLField(blank=True)
@@ -128,7 +173,7 @@ class BusinessInfo(SingletonModel):
     instagram = models.URLField(blank=True)
     address = models.CharField(max_length=255, default="Online — worldwide")
     map_embed = models.TextField(blank=True, help_text="Google Maps iframe HTML")
-    about = models.TextField(default="Team Tiffany Gaming Casino brings you a "
+    about = models.TextField(default="A "
                              "curated collection of the world's most exciting games.")
     terms = models.TextField(default="Play responsibly. 18+ only.")
     privacy = models.TextField(default="We respect your privacy.")
@@ -140,7 +185,7 @@ class BusinessInfo(SingletonModel):
         verbose_name_plural = "Business Info"
 
 
-class ContactMessage(models.Model):
+class ContactMessage(TenantModel):
     name = models.CharField(max_length=120)
     email = models.EmailField(blank=True)
     phone = models.CharField(max_length=40, blank=True)
@@ -154,7 +199,7 @@ class ContactMessage(models.Model):
         return f"{self.name} ({self.created_at:%Y-%m-%d})"
 
 
-class PaymentMethod(models.Model):
+class PaymentMethod(TenantModel):
     name = models.CharField(max_length=80)
     details = models.CharField(max_length=200, blank=True,
                                help_text="Account/handle/instructions")
@@ -169,7 +214,7 @@ class PaymentMethod(models.Model):
         return self.name
 
 
-class Cashout(models.Model):
+class Cashout(TenantModel):
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
         PAID = "paid", "Paid"
@@ -192,16 +237,7 @@ class Cashout(models.Model):
         return f"{self.player} — {self.amount}"
 
 
-class Wallet(models.Model):
-    user = models.OneToOneField(settings.AUTH_USER_MODEL,
-                                on_delete=models.CASCADE, related_name="wallet")
-    balance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-
-    def __str__(self):
-        return f"{self.user} — {self.balance}"
-
-
-class Transaction(models.Model):
+class Transaction(TenantModel):
     class Kind(models.TextChoices):
         LOAD = "load", "Load"
         CASHOUT = "cashout", "Cashout"
@@ -235,7 +271,7 @@ class Transaction(models.Model):
         return f"{self.user} {self.amount} ({self.kind})"
 
 
-class Notification(models.Model):
+class Notification(TenantModel):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
                              related_name="notifications")
     text = models.CharField(max_length=255)
@@ -250,7 +286,7 @@ class Notification(models.Model):
         return self.text
 
 
-class Promo(models.Model):
+class Promo(TenantModel):
     title = models.CharField(max_length=150)
     code = models.CharField(max_length=40, blank=True)
     description = models.TextField(blank=True)
@@ -267,7 +303,7 @@ class Promo(models.Model):
         return self.title
 
 
-class SiteFAQ(models.Model):
+class SiteFAQ(TenantModel):
     question = models.CharField(max_length=255)
     answer = models.TextField()
     category = models.CharField(max_length=60, blank=True, default="General")
@@ -281,7 +317,7 @@ class SiteFAQ(models.Model):
         return self.question
 
 
-class GameTxn(models.Model):
+class GameTxn(TenantModel):
     """Game-platform deposit/withdraw ledger, tracked by Nepal shift.
 
     Distinct from the site's own player-wallet `Transaction`; this records the
@@ -293,6 +329,10 @@ class GameTxn(models.Model):
 
     kind = models.CharField(max_length=10, choices=Kind.choices,
                             default=Kind.LOAD)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                             on_delete=models.SET_NULL, related_name="game_txns")
+    game = models.ForeignKey("catalog.Game", null=True, blank=True,
+                             on_delete=models.SET_NULL, related_name="txns")
     account_name = models.CharField(max_length=120, blank=True)
     platform_user_id = models.CharField(max_length=60, blank=True)
     amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -323,8 +363,8 @@ class GameTxn(models.Model):
         return f"{self.kind} {self.amount} {self.account_name}"
 
 
-class SEOPage(models.Model):
-    page = models.CharField(max_length=60, unique=True,
+class SEOPage(TenantModel):
+    page = models.CharField(max_length=60,
                             help_text="Page key, e.g. home, games, winners")
     title = models.CharField(max_length=180, blank=True)
     description = models.CharField(max_length=300, blank=True)
@@ -332,6 +372,9 @@ class SEOPage(models.Model):
     canonical = models.URLField(blank=True)
     og_image = models.ImageField(upload_to="seo/", blank=True, null=True)
     robots = models.CharField(max_length=60, default="index, follow")
+
+    class Meta:
+        unique_together = [("tenant", "page")]
 
     def __str__(self):
         return self.page

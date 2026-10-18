@@ -11,14 +11,16 @@ import random
 from datetime import date, timedelta
 
 from django.core.files.base import ContentFile
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from PIL import Image, ImageDraw, ImageFont
 
 from accounts.models import User
+from tenants.context import use_tenant
+from tenants.models import Tenant
 from catalog.models import Category, FAQ, Favorite, Game, Review, Screenshot
 from content.models import (Announcement, BusinessInfo, Cashout, DailyProfit,
                             PaymentMethod, Promo, SiteFAQ, SiteSettings,
-                            Transaction, Wallet, Winner)
+                            Transaction, Winner)
 
 BRAND_DARK = (11, 15, 26)
 BRAND_PURPLE = (124, 58, 237)
@@ -171,38 +173,57 @@ def hue_pair(i):
 class Command(BaseCommand):
     help = "Seed branding, categories, games (with images), winners, profit."
 
+    def add_arguments(self, parser):
+        parser.add_argument("--tenant", default="platform",
+                            help="Tenant slug to seed (default: platform)")
+        parser.add_argument("--no-users", action="store_true",
+                            help="Skip the demo admin/agent/user accounts")
+
     def handle(self, *args, **opts):
+        tenant = Tenant.objects.filter(slug=opts["tenant"]).first()
+        if tenant is None:
+            raise CommandError(f"No tenant with slug {opts['tenant']!r}")
+        with use_tenant(tenant):
+            self.seed(tenant, with_users=not opts["no_users"])
+
+    def seed(self, tenant, with_users=True):
         random.seed(42)
 
         # --- users ---
-        if not User.objects.filter(username="admin").exists():
-            User.objects.create_superuser(
-                username="admin", password="admin123", role="admin",
-                full_name="Site Administrator")
-            self.stdout.write("Created admin / admin123")
-        if not User.objects.filter(username="user").exists():
-            u = User(username="user", role="user", full_name="Demo Player")
-            u.set_password("user123")
-            u.save()
-            self.stdout.write("Created user / user123")
+        if with_users:
+            if not User.objects.filter(username="admin").exists():
+                User.objects.create_superuser(
+                    username="admin", password="admin123", role="admin",
+                    full_name="Site Administrator")
+                self.stdout.write("Created admin / admin123")
+            if not User.objects.filter(username="agent").exists():
+                a = User(username="agent", role="agent", full_name="Demo Agent")
+                a.set_password("agent123")
+                a.save()
+                self.stdout.write("Created agent / agent123")
+            if not User.objects.filter(username="user").exists():
+                u = User(username="user", role="user", full_name="Demo Player",
+                         agent=User.objects.filter(username="agent").first())
+                u.set_password("user123")
+                u.save()
+                self.stdout.write("Created user / user123")
 
-        # --- branding ---
+        # --- branding (only on a fresh site; never overwrite an operator's) ---
         s = SiteSettings.load()
-        s.site_name = "Tiffany Gaming"
-        s.tagline = ("Keep playing, keep winning — your journey to success "
-                     "starts with each bet.")
-        s.color_primary = "#0B0F1A"
-        s.color_secondary = "#7C3AED"
-        s.color_accent = "#F5C542"
+        if s.site_name == "My Casino":
+            s.site_name = tenant.name if not tenant.is_platform else "Royal Spin"
+            s.tagline = ("Keep playing, keep winning — your journey to "
+                         "success starts with each bet.")
         if not s.logo:
+            initials = "".join(w[0] for w in s.site_name.split()[:2]).upper()
             s.logo.save("logo.png", make_image(400, 400, BRAND_PURPLE,
-                        BRAND_DARK, "TF"), save=False)
+                        BRAND_DARK, initials or "C"), save=False)
         s.save()
 
         b = BusinessInfo.load()
-        b.business_name = "Tiffany Gaming"
-        b.facebook = b.facebook or "https://facebook.com/tiffanygaming"
-        b.save()
+        if b.business_name == "My Casino":
+            b.business_name = s.site_name
+            b.save()
 
         # --- categories ---
         cats = {}
@@ -224,8 +245,8 @@ class Command(BaseCommand):
                 short_description=short, description=desc,
                 features="\n".join(feats), status="active",
                 featured=(i < 4), is_new=(i >= 7), sort_order=i,
-                user_link=f"https://play.tiffany.gg/{slug}",
-                agent_link=f"https://agent.tiffany.gg/{slug}",
+                user_link=f"https://play.example.com/{slug}",
+                agent_link=f"https://agent.example.com/{slug}",
                 meta_title=f"{name} Download & Login — Play {name} Online",
                 meta_description=short,
                 meta_keywords=(f"{name}, {name} download, {name} login, "
@@ -268,10 +289,10 @@ class Command(BaseCommand):
         # --- payment methods ---
         if not PaymentMethod.objects.exists():
             for i, (nm, det, ic) in enumerate([
-                ("CashApp", "$TiffanyGaming", "cash"),
+                ("CashApp", "$YourCashtag", "cash"),
                 ("Bitcoin", "Ask agent for wallet", "coin"),
-                ("Venmo", "@TiffanyGaming", "card"),
-                ("PayPal", "pay@tiffany.gg", "card"),
+                ("Venmo", "@YourVenmo", "card"),
+                ("PayPal", "pay@example.com", "card"),
             ]):
                 PaymentMethod.objects.create(name=nm, details=det, icon=ic,
                                              sort_order=i)
@@ -290,7 +311,7 @@ class Command(BaseCommand):
 
         # --- promotions ---
         if not Promo.objects.exists():
-            Promo.objects.create(title="200% First Load Bonus", code="TIFFANY200",
+            Promo.objects.create(title="200% First Load Bonus", code="WELCOME200",
                                  description="Double your first load on any game. Ask your agent.", sort_order=0)
             Promo.objects.create(title="Refer & Earn", code="REFER",
                                  description="Invite friends with your referral code and earn credits.", sort_order=1)
@@ -308,19 +329,12 @@ class Command(BaseCommand):
             ]):
                 SiteFAQ.objects.create(question=q, answer=a, sort_order=i)
 
-        # --- backfill referral codes + wallets + demo reviews ---
+        # --- backfill referral codes + demo reviews ---
         for u in User.objects.all():
             if not u.referral_code:
                 u.save()
         player = User.objects.filter(username="user").first()
         if player:
-            w, _ = Wallet.objects.get_or_create(user=player)
-            if w.balance == 0 and not player.transactions.exists():
-                w.balance = 250; w.save()
-                Transaction.objects.create(user=player, amount=250, kind="load",
-                                           note="Welcome load")
-                Transaction.objects.create(user=player, amount=50, kind="bonus",
-                                           note="Signup bonus")
             if not Review.objects.filter(user=player).exists():
                 for g in Game.objects.all()[:4]:
                     Review.objects.create(game=g, user=player,

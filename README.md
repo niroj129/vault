@@ -1,7 +1,8 @@
-# 🎰 Tiffany Gaming — Next.js + Django REST Framework
+# 🎰 White-label Casino Platform — Next.js + Django REST Framework
 
-An **SEO-first** sweepstakes / social-casino portal for **Tiffany Gaming**
-*("Keep playing, keep winning — your journey to success starts with each bet.")*
+An **SEO-first** sweepstakes / social-casino portal that you **sell to other
+operators**. Every operator (a *tenant*) gets their own site on their own domain,
+with their own branding, admin panel, agents, players, games, messenger and SMS.
 
 - **Frontend:** Next.js 15 (App Router, SSR/SSG + ISR) → `frontend/`
 - **Backend:** Django + Django REST Framework (knox token auth) → `backend/`
@@ -22,7 +23,7 @@ Node and Python deps are already installed in this workspace. From `vault-alert/
 cd backend
 python3 manage.py migrate          # first time only
 python3 manage.py seed             # first time only — branding + 11 games + images
-python3 manage.py runserver 8000
+python3 manage.py runserver 8000   # ASGI (Daphne): HTTP + websockets
 ```
 
 **2) Frontend — Next.js (port 3000)**
@@ -32,12 +33,17 @@ npm install                        # first time only
 npm run dev                        # or: npm run build && npm start
 ```
 
-Open **http://localhost:3000**
+Open **http://localhost:3000** — this is the **platform** site (your own).
 
 | Account | Username | Password | Lands on |
 |---------|----------|----------|----------|
-| Admin | `admin` | `admin123` | `/admin` |
+| Platform owner + admin | `admin` | `admin123` | `/admin` (+ **Platform** in the header) |
+| Agent | `agent` | `agent123` | `/agent` |
 | Player | `user` | `user123` | `/dashboard` |
+
+To try a client site, create one in **Platform → New site** with the domain
+`something.localhost`, then open `http://something.localhost:3000` (`*.localhost`
+resolves to your machine in Chrome and Safari).
 
 Full management console (games/images/categories/SEO): **http://127.0.0.1:8000/django-admin/**
 
@@ -66,7 +72,6 @@ Contact-Agent buttons across the site open **direct chat** with support.
 |---------|-------|
 | **Game ratings & reviews** | Game page — 5-star submit + list; averages feed an `AggregateRating` schema for SEO and show as stars on every game card. |
 | **Favorites / wishlist** | Heart toggle on game pages; a Favorites grid on the player dashboard. |
-| **Player wallet** | Balance + transaction history on the dashboard; admins credit/debit under **Player Wallets** (logged + notifies the player). |
 | **Referral system** | Each player gets a referral code + shareable link on their dashboard. |
 | **Promotions / bonus codes** | Public `/promotions` page; managed under Admin → Promotions. |
 | **In-app notifications** | Header 🔔 bell with unread badge; fired on new announcements and support replies. |
@@ -82,7 +87,6 @@ Contact-Agent buttons across the site open **direct chat** with support.
 
 **Money / ledger**
 - **All-time settlement report** (Admin → Settlement): lifetime loads, bonuses, cashouts, pending cashouts, player-balance liability, total profit, and per-player balances.
-- **Player wallet ledger** with running balance on the dashboard.
 - **Cashout requests** — players request a cashout; it lands as a *pending* cashout and notifies admins; admins set Paid/Pending/Rejected.
 
 **Players & loyalty**
@@ -163,18 +167,53 @@ during seeding. To use the official artwork, upload it in Django admin →
 
 ---
 
-## 💬 Chat — strictly Admin ↔ User
+## 🏢 Multi-tenant platform (selling sites)
 
-Enforced in `backend/chat/views.py`:
+- **Tenant = one casino site.** It's chosen by the domain the request arrives on
+  (`tenants.middleware.TenantMiddleware`). Every model inherits
+  `tenants.models.TenantModel`, whose default manager only returns the current
+  tenant's rows and stamps new rows automatically, so views need no tenant code.
+  Use `Model.all_tenants` to deliberately query across sites.
+- **Platform panel (`/platform`)** — for superusers of the platform tenant: create
+  a site (name, domains, plan, price, paid-until, account limit, features, brand
+  colour, first admin login, optional demo games), edit, suspend or delete it.
+- **Plans switch features on/off** per site: games, messenger, SMS, payments.
+- **White-label:** name, logo, favicon, tagline and colours come from each site's
+  Admin → Settings. Nothing in the code names a brand.
+- **Roles inside a site:** `admin` → `agent` → `user` (plus `merchant`). Admins
+  create agents; agents create and see only their own players (`/agent`).
+- Usernames are unique **per site**; a login token only works on the site that
+  issued it.
 
-- A **user can only message an admin** (support). They never choose a recipient
-  and only ever see their own conversation.
-- An **admin** sees an **inbox** of players and can reply to any of them.
-- **User-to-user messaging is impossible.**
-- Chat requires login (guarded on both API and UI).
+## 🎨 Lobby design
 
-Delivery is via short polling (3s) — no extra infrastructure. Swap in Django
-Channels/WebSockets later without changing the data model.
+- App shell (`frontend/components/shell/SiteShell.jsx`): collapsible sidebar with
+  categories, sticky top bar with search + account menu, and a bottom tab bar +
+  drawer on phones. Styles live in `frontend/app/lobby.css`; the operator's brand
+  colour (Admin → Settings → accent) drives buttons and highlights.
+- Lobby: promo carousel, category chips, horizontal game rails, live wins,
+  perks, FAQ. Game pages get a blurred key-art hero, play panel and steps.
+- Game art is generated per game (portrait tile, banner, square) by
+  `backend/content/imagegen.py` with bundled OFL fonts. Re-run it any time with
+  `python3 manage.py regen_art` (uploaded images are never replaced).
+
+## 💬 Messenger (`/messages`)
+
+- Anyone can message anyone **on the same site**; **groups** with owner/admin
+  roles (rename, add/remove, leave); photos, emoji, unread badges, typing
+  indicator and read receipts.
+- **Real time over websockets** (Django Channels, `ws(s)://<site>/ws/messenger/`).
+  Writes go through the REST API (`/api/messenger/…`); every change is pushed to
+  participants. If the socket drops, the page falls back to polling.
+- **SMS threads** (admins & agents, if the plan includes SMS): text a phone number
+  through the site's own Twilio account (Admin → Settings). Set Twilio's
+  "A message comes in" webhook to `https://<site-domain>/api/messenger/sms/inbound/`;
+  replies appear in the same thread for every admin. Webhooks are verified with
+  Twilio's signature.
+- The original player ↔ support chat (`/chat`) is unchanged.
+
+Run the backend tests with `python3 manage.py test` (tenant isolation, roles,
+messenger, signed SMS webhook).
 
 ---
 
@@ -183,11 +222,12 @@ Channels/WebSockets later without changing the data model.
 ```
 backend/
   casino_backend/       # settings, urls, wsgi/asgi
-  accounts/             # custom User (roles: admin/user), knox auth, admin user CRUD
+  tenants/              # Tenant, Domain, scoping manager, middleware, Platform API
+  accounts/             # custom User (roles: admin/agent/merchant/user), knox auth, user CRUD
   catalog/              # Category, Game, Screenshot, FAQ + API
   content/              # Winner, DailyProfit, Announcement, SiteSettings,
                         #   BusinessInfo, SEOPage, ContactMessage, stats + seed cmd
-  chat/                 # Message model + admin↔user API
+  chat/                 # support chat + messenger (REST, websocket consumer, SMS bridge)
   media/                # uploaded & generated images
 frontend/
   app/                  # App Router pages (home, games, [slug], winners,
@@ -222,3 +262,46 @@ origin, password hashing (PBKDF2), admin-only write endpoints.
 - Serve Django with gunicorn + WhiteNoise/nginx for `/media` & `/static`.
 - `npm run build && npm start` for the frontend (or deploy to Vercel).
 - Point `DATABASES` at Postgres/MySQL.
+
+## Player app, safety and staff tools
+
+- **Night glass theme** (`frontend/app/glass.css`) on the player side; the admin
+  console (`frontend/app/admin/admin.css`) has Night (default) and Day themes.
+- **Player app**: 4 tabs on phones — Home (balance, VIP progress, shortcuts,
+  game logins), Games, Messages, Profile.
+- **Messenger**: find anyone by `@username`; Support is a pinned conversation
+  per player (old `/chat` history was migrated). Edit within 15 min, delete for
+  everyone, online / last-seen, profile photo and bio.
+- **Safety**: block, report (admin queue at `/admin/reports`: warn, mute, ban,
+  dismiss), "who can message me" privacy, and a 10-new-people-a-day limit for
+  players who haven't loaded yet.
+- **Staff**: saved replies (⚡ in the composer), player panel beside each chat
+  (balance, VIP, game logins, notes), game logins editor on Players.
+- **Push notifications**: Web Push via `public/sw.js`. Set `VAPID_PUBLIC_KEY` /
+  `VAPID_PRIVATE_KEY` in `.env` (`python manage.py vapid_keys` prints a pair).
+- **Platform**: per-site usage (players, active players, messages, loads).
+
+## Games, payments and self sign-up
+
+- **Self sign-up** at `/signup` (Admin → Deposits → Settings → "New players can
+  sign up themselves"). Staff accounts are still made by admins.
+- **Game APIs** (Admin → Game APIs): connect each platform once, then pick it on
+  the game (Admin → Games & images). Supported types:
+  - `external` — Game Vault and `/api/external/*` platforms (tick UPPERCASE
+    token + 13-digit timestamp for Game Vault)
+  - `agentserver` — Cash Machine, Mafia, Game Room (`agentserver.<host>`)
+  - `ashx` — Fire Kirin, Lucky Strike (`…/ws/service.ashx`, whole dollars)
+  - `fastapi` — FastApi platforms (appid + appsecret, or agent login)
+  - `manual` — no API, staff load by hand
+  The server's IP must be whitelisted with each vendor.
+- **Payments (BytePayout)** — Admin → Deposits → Settings: API key, webhook
+  signing key, methods, auto-load, bonus %. Paste the shown webhook address
+  (`https://<site>/api/pay/bytepayout/webhook/`) into BytePayout.
+  Flow: player picks game + method + amount on `/load` → checkout → webhook
+  (or status check) says approved → the site creates the player's game
+  account if needed and loads it. Failed loads show under Deposits → "Needs
+  you" with **Load now**; staff can also **Record payment** for cash.
+- **Cash outs**: players request on `/load?tab=redeem`; staff approve (credits
+  are taken back through the game API), pay the player, then **Mark paid**.
+- `python manage.py sync_deposits` re-checks pending deposits and finishes
+  queued loads; the `worker` service in docker-compose runs it every 2 minutes.
