@@ -25,6 +25,17 @@ type Values = z.infer<typeof schema>;
 /** Where each role starts. The owner starts in their console, not in one site's admin. */
 const home = (u: { role: string; is_platform_owner?: boolean }) => (u.is_platform_owner ? "/platform" : u.role === "admin" ? "/admin" : u.role === "agent" ? "/agent" : "/");
 
+/** Honour ?next= only for a page this person may open. Logging out of /admin leaves ?next=/admin
+ * behind; the next person to sign in (a player) must land on their own home, not bounce off it. */
+function nextFor(next: string | null, u: { role: string; is_platform_owner?: boolean }) {
+  if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/login")) return null;
+  const inArea = (area: string) => next === area || next.startsWith(`${area}/`) || next.startsWith(`${area}?`);
+  if (inArea("/platform")) return u.is_platform_owner ? next : null;
+  if (inArea("/admin")) return u.role === "admin" && !u.is_platform_owner ? next : null;
+  if (inArea("/agent")) return u.role === "agent" || u.role === "admin" ? next : null;
+  return next;
+}
+
 export function LoginForm() {
   const site = useSite();
   const { login } = useAuth();
@@ -36,7 +47,7 @@ export function LoginForm() {
   async function submit(v: Values) {
     try {
       const user = await login(v.username.trim(), v.password);
-      router.push(next && next.startsWith("/") && !next.startsWith("//") ? next : home(user));
+      router.push(nextFor(next, user) ?? home(user));
     } catch (e) {
       form.setError("root", { message: e instanceof ApiError && e.status >= 500 ? "We can't reach the server. Try again in a moment." : "Incorrect username or password." });
       form.setFocus("password");
