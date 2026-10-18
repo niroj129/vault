@@ -323,6 +323,7 @@ def points_report(request):
             "sub_points": float(g.sub_points),
             "vendor_points": float(g.vendor_points),
             "combined": combined, "low": combined < threshold,
+            "live": bool(g.points_synced_at), "synced_at": g.points_synced_at,
         })
     return Response({
         "threshold": threshold,
@@ -368,9 +369,38 @@ class PromoViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = Promo.objects.all()
-        if not (self.request.user.is_authenticated and self.request.user.is_admin_role):
-            qs = qs.filter(active=True)
-        return qs
+        u = self.request.user
+        if u.is_authenticated and u.is_admin_role:
+            return qs
+        qs = qs.filter(active=True)
+        if self.action == "mine":
+            from django.db.models import Q
+            today = timezone.localdate()
+            qs = qs.filter(Q(starts__isnull=True) | Q(starts__lte=today),
+                           Q(expires__isnull=True) | Q(expires__gte=today))
+            return qs.filter(Q(audience="all") | Q(audience="only", players=u)
+                             | (Q(audience="except") & ~Q(players=u))).distinct()
+        # the public list: only offers meant for everyone. Targeted ones reach their
+        # players through /promos/mine/ so they stay hidden from everybody else.
+        return qs.filter(audience="all")
+
+    @action(detail=False, methods=["get"], permission_classes=[IsAuthenticatedPerm])
+    def mine(self, request):
+        """Every live promotion this player is offered, targeted ones included."""
+        return Response(self.get_serializer(self.get_queryset(), many=True).data)
+
+    @action(detail=True, methods=["get", "put"], permission_classes=[IsAdminRole])
+    def players(self, request, pk=None):
+        """The players a targeted promotion lists (staff). PUT {"user_ids": [...]} replaces them."""
+        from accounts.models import User
+        promo = self.get_object()
+        if request.method == "PUT":
+            ids = request.data.get("user_ids") or []
+            if not isinstance(ids, list):
+                return Response({"detail": "user_ids must be a list."}, status=400)
+            promo.players.set(User.objects.filter(pk__in=ids, role="user"))
+        return Response([{"id": u.id, "username": u.username, "full_name": u.full_name}
+                         for u in promo.players.order_by("username")])
 
 
 class SiteFAQViewSet(viewsets.ModelViewSet):

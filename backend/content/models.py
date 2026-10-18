@@ -151,10 +151,22 @@ class SiteSettings(SingletonModel):
         max_digits=5, decimal_places=2, default=3, help_text="Minimum cash out = this × the load")
     cashout_max_x = models.DecimalField(
         max_digits=5, decimal_places=2, default=10, help_text="Maximum cash out = this × the load")
-    cashout_basis = models.CharField(
+    # what each end of the range multiplies: what staff loaded, or what the player paid
+    cashout_min_basis = models.CharField(
         max_length=10, default="loaded",
         choices=[("loaded", "Credits loaded"), ("deposit", "Money paid")],
-        help_text="Multiply what staff loaded, or what the player paid")
+        help_text="The minimum cash out multiplies this")
+    cashout_max_basis = models.CharField(
+        max_length=10, default="loaded",
+        choices=[("loaded", "Credits loaded"), ("deposit", "Money paid")],
+        help_text="The maximum cash out multiplies this")
+    # free play loads (no payment) can be cashed out under their own rule
+    freeplay_cashout_enabled = models.BooleanField(
+        default=False, help_text="Let players cash out winnings from free play loads")
+    freeplay_cashout_min_x = models.DecimalField(
+        max_digits=5, decimal_places=2, default=1, help_text="Minimum cash out = this × the free play credits")
+    freeplay_cashout_max_x = models.DecimalField(
+        max_digits=5, decimal_places=2, default=3, help_text="Maximum cash out = this × the free play credits")
 
     def __str__(self):
         return "Site Settings"
@@ -312,6 +324,23 @@ class Promo(TenantModel):
     max_uses = models.PositiveIntegerField(
         default=0, help_text="Total uses across all players (0 = unlimited)")
     starts = models.DateField(null=True, blank=True)
+    # who it's for, and whether it applies without a code
+    audience = models.CharField(max_length=8, choices=[
+        ("all", "Everyone"), ("only", "Only the players I pick"),
+        ("except", "Everyone except the players I pick")], default="all")
+    players = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True,
+                                     related_name="targeted_promos")
+    freeplay_min_x = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True,
+        help_text="Free play only: minimum cash out multiple for this code (empty = use the site's free play rule)")
+    freeplay_max_x = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True,
+        help_text="Free play only: maximum cash out multiple for this code (empty = use the site's free play rule)")
+    free_credits = models.DecimalField(
+        max_digits=8, decimal_places=2, default=0,
+        help_text="Free play: credits loaded onto the game with no payment when a player redeems the code")
+    auto_apply = models.BooleanField(
+        default=False, help_text="Added to an eligible player's load automatically — no code to enter")
     description = models.TextField(blank=True)
     image = models.ImageField(upload_to="promos/", blank=True, null=True)
     active = models.BooleanField(default=True)

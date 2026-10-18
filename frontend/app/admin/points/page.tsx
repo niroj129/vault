@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Bell, Check, Send, Star, TriangleAlert, Zap } from "lucide-react";
+import { Bell, Check, RefreshCw, Send, Star, TriangleAlert, Zap } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -10,6 +10,7 @@ import { PasswordInput } from "@/components/auth/password-input";
 import { PageHeader } from "@/components/common/page-header";
 import { StatCard, StatGrid } from "@/components/admin/stat-card";
 import { StatusBadge } from "@/components/play/status-badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -21,7 +22,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { apiFetch, errorText } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
-interface PointRow { id: number; slug: string; name: string; sub_points: string; vendor_points: string; combined: string; low: boolean }
+interface PointRow { id: number; slug: string; name: string; sub_points: string; vendor_points: string; combined: string; low: boolean; live: boolean; synced_at: string | null }
 interface Report { low_count: number; threshold: string; load_amount: string; telegram_configured: boolean; rows: PointRow[] }
 
 const tgSchema = z.object({
@@ -50,9 +51,10 @@ function PointsRow({ r, onSaved }: { r: PointRow; onSaved: () => void }) {
   }
   return (
     <TableRow>
-      <TableCell><b>{r.name}</b></TableCell>
-      <TableCell><Input aria-label={`${r.name} sub-distributor points`} type="number" inputMode="decimal" className="w-28" value={sub} onChange={(e) => setSub(e.target.value)} /></TableCell>
-      <TableCell><Input aria-label={`${r.name} vendor points`} type="number" inputMode="decimal" className="w-28" value={vendor} onChange={(e) => setVendor(e.target.value)} /></TableCell>
+      <TableCell><b>{r.name}</b>
+        {r.live && <div className="mt-1"><Badge variant="secondary" className="gap-1"><RefreshCw className="size-3" aria-hidden />Live from API</Badge></div>}</TableCell>
+      <TableCell><Input aria-label={`${r.name} sub-distributor points`} type="number" inputMode="decimal" className="w-28" value={sub} readOnly={r.live} disabled={r.live} onChange={(e) => setSub(e.target.value)} /></TableCell>
+      <TableCell><Input aria-label={`${r.name} vendor points`} type="number" inputMode="decimal" className="w-28" value={vendor} readOnly={r.live} disabled={r.live} onChange={(e) => setVendor(e.target.value)} /></TableCell>
       <TableCell><StatusBadge tone={r.low ? "wait" : "ok"}>{r.combined}{r.low ? " · low" : ""}</StatusBadge></TableCell>
       <TableCell>
         <div className="flex justify-end gap-1">
@@ -74,15 +76,26 @@ export default function AdminPoints() {
   const form = useForm<TgValues>({ resolver: zodResolver(tgSchema), defaultValues: { telegram_bot_token: "", telegram_chat_id: "", points_threshold: "", load_amount: "" } });
   const { errors, isSubmitting } = form.formState;
 
+  const [syncing, setSyncing] = useState(false);
   const load = useCallback(() => { apiFetch<Report>("/points/report/", { token }).then(setReport).catch((e) => toast.error(errorText(e))); }, [token]);
+  /** Ask each connected game platform for its points now. Quiet when nothing is connected. */
+  const sync = useCallback(async (loud: boolean) => {
+    setSyncing(true);
+    try {
+      const r = await apiFetch<{ synced: number }>("/admin/points/sync/", { method: "POST", token });
+      if (loud) toast.success(r.synced ? `Updated points from ${r.synced} game platform${r.synced === 1 ? "" : "s"}` : "No connected game platform answered. Check Game APIs.");
+      load();
+    } catch (e) { if (loud) toast.error(errorText(e)); } finally { setSyncing(false); }
+  }, [token, load]);
   useEffect(() => {
     if (!token) return;
     load();
+    void sync(false); // points come from the game API automatically whenever this page opens
     apiFetch<Record<string, unknown>>("/settings/", { token }).then((s) => form.reset({
       telegram_bot_token: String(s.telegram_bot_token ?? ""), telegram_chat_id: String(s.telegram_chat_id ?? ""),
       points_threshold: String(s.points_threshold ?? ""), load_amount: String(s.load_amount ?? ""),
     })).catch(() => {});
-  }, [token, load, form]);
+  }, [token, load, sync, form]);
 
   async function saveTelegram(v: TgValues) {
     try { await apiFetch("/settings/", { method: "PUT", token, body: v }); toast.success("Telegram settings saved"); form.reset(v); load(); }
@@ -99,6 +112,10 @@ export default function AdminPoints() {
           <StatCard icon={Zap} label="Default load" value={String(report.load_amount)} />
           <StatCard icon={Send} label="Telegram" value={report.telegram_configured ? "On" : "Off"} note={report.telegram_configured ? "Alerts are sent" : "Add a bot below"} tone={report.telegram_configured ? undefined : "warn"} />
         </StatGrid>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm text-muted-foreground" aria-live="polite">{syncing ? "Updating from the game APIs…" : "Games on a connected platform update by themselves every few minutes."}</p>
+          <Button variant="outline" onClick={() => void sync(true)} disabled={syncing} aria-busy={syncing}>{syncing ? <Spinner aria-hidden /> : <RefreshCw aria-hidden />}Update from game APIs</Button>
+        </div>
         <Card className="glass py-0">
           <Table>
             <caption className="sr-only">Points per game. Edit a number, then save that row.</caption>

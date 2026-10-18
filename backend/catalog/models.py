@@ -67,6 +67,8 @@ class Game(TenantModel):
     # vendor / sub-distributor load points (ported from the points tracker)
     sub_points = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     vendor_points = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    points_synced_at = models.DateTimeField(
+        null=True, blank=True, help_text="Set when the points came from the game API (kept up to date automatically)")
 
     status = models.CharField(max_length=10, choices=Status.choices,
                               default=Status.ACTIVE)

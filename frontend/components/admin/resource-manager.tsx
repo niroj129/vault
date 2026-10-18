@@ -138,6 +138,8 @@ export function ResourceForm({ fields, initial, editing, onSubmit, submitLabel, 
 
 interface Props<T extends Row> {
   title: string; itemName: string; endpoint: string; columns: ColumnDef<T>[]; fields: FieldDef[];
+  /** extra buttons per row, e.g. a dialog; call the second argument to reload the list */
+  rowActions?: (row: T, reload: () => void) => ReactNode;
   defaults?: Record<string, unknown>; addLabel?: string; canAdd?: boolean; canEdit?: boolean; canDelete?: boolean;
   searchKeys?: (keyof T & string)[]; describeDelete?: (row: T) => string; lookupKey?: keyof T & string;
   renderList?: (rows: T[], api: { edit: (row: T) => void; remove: (row: T) => void; reload: () => void }) => ReactNode;
@@ -147,7 +149,7 @@ interface Props<T extends Row> {
 /** List + add/edit/delete for one API collection (shadcn Table on desktop, cards on phones). */
 export function ResourceManager<T extends Row>({
   title, itemName, endpoint, columns, fields, defaults = {}, addLabel, canAdd = true, canEdit = true, canDelete = true,
-  searchKeys, describeDelete, lookupKey = "id" as keyof T & string, renderList, filterRows, toolbar, reloadKey = 0, emptyText,
+  searchKeys, describeDelete, lookupKey = "id" as keyof T & string, renderList, filterRows, toolbar, reloadKey = 0, emptyText, rowActions,
 }: Props<T>) {
   const { token } = useAuth();
   const [rows, setRows] = useState<T[] | null>(null);
@@ -203,6 +205,7 @@ export function ResourceManager<T extends Row>({
   const visible = searched && filterRows ? filterRows(searched) : searched;
   const actions = (row: T) => (
     <div className="flex justify-end gap-1">
+      {rowActions?.(row, load)}
       {canEdit && <Button variant="ghost" size="icon-sm" onClick={() => void openEdit(row)} aria-label={`Edit ${itemName.toLowerCase()}`}><Pencil aria-hidden /></Button>}
       {canDelete && <Button variant="ghost" size="icon-sm" className="text-destructive-text hover:text-destructive-text" onClick={() => setDeleting(row)} aria-label={`Delete ${itemName.toLowerCase()}`}><Trash2 aria-hidden /></Button>}
     </div>

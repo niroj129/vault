@@ -40,12 +40,13 @@ class SiteSettingsSerializer(serializers.ModelSerializer):
         read_only_fields = ["inbound_mail_token", "sendblue_token"]  # changed only through their setup pages
 
     def validate(self, data):
-        lo = data.get("cashout_min_x", getattr(self.instance, "cashout_min_x", 3))
-        hi = data.get("cashout_max_x", getattr(self.instance, "cashout_max_x", 10))
-        if lo is not None and lo <= 0:
-            raise serializers.ValidationError({"cashout_min_x": "Must be more than 0."})
-        if lo is not None and hi is not None and hi < lo:
-            raise serializers.ValidationError({"cashout_max_x": "Must be at least the minimum."})
+        for pre, d_lo, d_hi in (("cashout", 3, 10), ("freeplay_cashout", 1, 3)):
+            lo = data.get(f"{pre}_min_x", getattr(self.instance, f"{pre}_min_x", d_lo))
+            hi = data.get(f"{pre}_max_x", getattr(self.instance, f"{pre}_max_x", d_hi))
+            if lo is not None and lo <= 0:
+                raise serializers.ValidationError({f"{pre}_min_x": "Must be more than 0."})
+            if lo is not None and hi is not None and hi < lo:
+                raise serializers.ValidationError({f"{pre}_max_x": "Must be at least the minimum."})
         return data
 
 
@@ -99,12 +100,17 @@ class PromoSerializer(serializers.ModelSerializer):
     image = RelativeImageField(required=False, allow_null=True)
     # how many deposits have claimed the code (paid or waiting)
     used = serializers.SerializerMethodField()
+    player_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Promo
         fields = ["id", "title", "code", "description", "image", "active",
                   "starts", "expires", "sort_order", "bonus_percent", "bonus_flat",
-                  "max_bonus", "min_deposit", "usage", "max_uses", "used"]
+                  "max_bonus", "min_deposit", "usage", "max_uses", "used",
+                  "audience", "auto_apply", "player_count", "free_credits", "freeplay_min_x", "freeplay_max_x"]
+
+    def get_player_count(self, obj):
+        return obj.players.count() if obj.audience != "all" else 0
 
     def get_used(self, obj):
         from gaming.service import _promo_holds
@@ -122,11 +128,24 @@ class PromoSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         get = lambda k, d=0: attrs.get(k, getattr(self.instance, k, d))  # noqa: E731
-        for k in ("bonus_percent", "bonus_flat", "max_bonus", "min_deposit"):
+        for k in ("bonus_percent", "bonus_flat", "max_bonus", "min_deposit", "free_credits"):
             if get(k) < 0:
                 raise serializers.ValidationError({k: "Can't be negative."})
-        if (get("bonus_percent") > 0 or get("bonus_flat") > 0) and not get("code", ""):
-            raise serializers.ValidationError({"code": "Add a code for players to enter."})
+        lo, hi = attrs.get("freeplay_min_x", getattr(self.instance, "freeplay_min_x", None)), attrs.get("freeplay_max_x", getattr(self.instance, "freeplay_max_x", None))
+        if lo is not None and lo <= 0:
+            raise serializers.ValidationError({"freeplay_min_x": "Must be more than 0."})
+        if lo is not None and hi is not None and hi < lo:
+            raise serializers.ValidationError({"freeplay_max_x": "Must be at least the minimum."})
+        free = get("free_credits") > 0
+        if free and not get("code", ""):
+            raise serializers.ValidationError({"code": "Free play needs a code for players to redeem."})
+        if free and get("auto_apply", False):
+            raise serializers.ValidationError({"auto_apply": "A free play code is redeemed by the player; it can't apply automatically."})
+        gives = get("bonus_percent") > 0 or get("bonus_flat") > 0
+        if gives and not get("code", "") and not get("auto_apply", False):
+            raise serializers.ValidationError({"code": "Add a code for players to enter, or turn on “Apply automatically”."})
+        if get("auto_apply", False) and not gives:
+            raise serializers.ValidationError({"auto_apply": "Set a bonus % or $ amount first."})
         if get("starts", None) and get("expires", None) and get("starts") > get("expires"):
             raise serializers.ValidationError({"expires": "Ends before it starts."})
         return attrs

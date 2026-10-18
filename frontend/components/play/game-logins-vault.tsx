@@ -60,6 +60,8 @@ function Row({ g, compact, onChanged }: { g: PlayGame; compact: boolean; onChang
     try { const r = await apiFetch<{ balance: string }>(`/play/accounts/${lg.id}/balance/`, { token }); setBal(r.balance); }
     catch (e) { setError(errorText(e)); } finally { setBusy(""); }
   }
+  // API-connected game: fetch the live balance on its own when the page opens
+  useEffect(() => { if (lg && g.automated) void refresh(); }, [lg?.id, g.automated]); // eslint-disable-line react-hooks/exhaustive-deps -- once per login
   async function create() {
     setBusy("create"); setError("");
     try { await apiFetch("/play/accounts/", { method: "POST", token, body: { game: g.id } }); onChanged(); }

@@ -18,7 +18,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/
 import { Spinner } from "@/components/ui/spinner";
 import { apiFetch, errorText, mediaUrl } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { quickAmounts, rangeText, ruleSummary, basisLabel } from "@/lib/cashout";
+import { loadLine, quickAmounts, rangeText, ruleSummary } from "@/lib/cashout";
 import { money, shortDate } from "@/lib/format";
 import { payDot, payHandleHint, payLabel } from "@/lib/pay-brands";
 import type { PlayOptions, Redeem } from "@/lib/types";
@@ -127,7 +127,7 @@ export function RedeemForm({ opts, preselect, onRequested }: { opts: PlayOptions
               <Info aria-hidden />
               <AlertTitle>You can cash out {rangeText(rule)}</AlertTitle>
               <AlertDescription>
-                Your last load{rule.load?.loaded_at ? ` (${shortDate(rule.load.loaded_at)})` : ""}: {money(rule.base)} {basisLabel(rule.basis)}. Cash outs are {ruleSummary(rule)}, one cash out per load.
+                Your last load{rule.load?.loaded_at ? ` (${shortDate(rule.load.loaded_at)})` : ""}: {loadLine(rule)}. Cash outs are {ruleSummary(rule)}, one cash out per load.
               </AlertDescription>
             </Alert>
           ))}

@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowRight, Check, Gamepad2, QrCode, Tag, X } from "lucide-react";
+import { ArrowRight, Check, Gamepad2, Gift, QrCode, Tag, X } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
@@ -70,12 +70,13 @@ export function LoadForm({ opts, preselect, initialPromo = "", onStarted }: { op
   const [checking, setChecking] = useState(false);
   useEffect(() => {
     setQuote(null); setPromoError("");
-    if (!promoCode || !(Number(amount) > 0)) return;
+    if (!(Number(amount) > 0)) return;
     let live = true;
     setChecking(true);
+    // with no code typed this asks for the automatic promotion the player qualifies for, if any
     apiFetch<PromoQuote>("/play/promo/check/", { method: "POST", token, body: { code: promoCode, amount } })
-      .then((q) => { if (live) setQuote(q); })
-      .catch((e) => { if (live) setPromoError(errorText(e)); })
+      .then((q) => { if (live && q.valid) setQuote(q); })
+      .catch((e) => { if (live && promoCode) setPromoError(errorText(e)); })
       .finally(() => { if (live) setChecking(false); });
     return () => { live = false; };
   }, [promoCode, amount, token]);
@@ -89,7 +90,7 @@ export function LoadForm({ opts, preselect, initialPromo = "", onStarted }: { op
     try {
       const d = await apiFetch<Deposit>("/play/deposits/", { method: "POST", token, body: {
         game: Number(v.game), method: v.method, amount: v.amount, game_username: v.game_username?.trim(),
-        promo_code: quote ? promoCode : undefined, return_url: `${window.location.origin}/load` } });
+        promo_code: quote && !quote.auto ? promoCode : undefined, return_url: `${window.location.origin}/load` } });
       if (d.checkout_url) {
         // straight to the hosted checkout (even when a tag is shown too); flag it so the status page doesn't send them again on return
         try { sessionStorage.setItem(`pay-redirected:${d.reference}`, "1"); } catch { /* private mode */ }
@@ -183,6 +184,11 @@ export function LoadForm({ opts, preselect, initialPromo = "", onStarted }: { op
         <CardContent className="grid gap-4">
           <Field data-invalid={!!promoError}>
             <FieldLabel htmlFor="promo-code" className="gap-1.5"><Tag className="size-4" aria-hidden />Promo code <span className="font-normal text-muted-foreground">(optional)</span></FieldLabel>
+            {quote?.auto && (
+              <p className="flex items-start gap-2 rounded-md bg-success/15 px-3 py-2 text-sm" role="status">
+                <Gift className="mt-0.5 size-4 shrink-0 text-success" aria-hidden /><span><b>{quote.title}</b> — +{money(quote.bonus)} added automatically</span>
+              </p>
+            )}
             {promoCode && quote ? (
               <div className="flex items-center gap-2 rounded-md bg-success/15 py-1.5 pr-1 pl-3" role="status">
                 <Check className="size-4 shrink-0 text-success" aria-hidden />
@@ -197,7 +203,7 @@ export function LoadForm({ opts, preselect, initialPromo = "", onStarted }: { op
                 <Button type="button" variant="outline" onClick={applyPromo} disabled={!promoText.trim() || checking} aria-busy={checking}>{checking ? <Spinner aria-hidden /> : "Apply"}</Button>
               </div>
             )}
-            {!(promoCode && quote) && (
+            {!(promoCode && quote) && !quote?.auto && (
               <FieldDescription id="promo-help" role={promoError ? "alert" : undefined} className={promoError ? "text-destructive-text" : undefined}>
                 {promoError || (promoCode && !Number(amount) ? "Pick an amount to see your bonus." : "Enter a code to get bonus credits on this load.")}
               </FieldDescription>
@@ -207,7 +213,7 @@ export function LoadForm({ opts, preselect, initialPromo = "", onStarted }: { op
             {([["Game", game?.name || "—"], ["Pay with", m?.label || "—"], ["You pay", Number(amount) ? money(amount) : "—"]] as const).map(([k, v]) => (
               <div key={k} className="flex justify-between gap-2"><dt className="text-muted-foreground">{k}</dt><dd className="font-semibold tabular-nums">{v}</dd></div>
             ))}
-            {quote && <div className="flex justify-between gap-2"><dt className="text-muted-foreground">Promo {quote.code}</dt><dd className="font-semibold text-success tabular-nums">+{money(quote.bonus)}</dd></div>}
+            {quote && <div className="flex justify-between gap-2"><dt className="text-muted-foreground">{quote.auto ? quote.title : `Promo ${quote.code}`}</dt><dd className="font-semibold text-success tabular-nums">+{money(quote.bonus)}</dd></div>}
             <div className="flex justify-between gap-2 border-t border-dashed pt-3"><dt className="text-muted-foreground">Credits</dt>
               <dd className="text-2xl font-bold text-brand-text tabular-nums">{credits ? money(credits.toFixed(2)) : "—"}</dd></div>
           </dl>
@@ -224,7 +230,7 @@ export function LoadForm({ opts, preselect, initialPromo = "", onStarted }: { op
     </form>
     {/* outside the <form>: React bubbles portal events to parents, so a nested form would also submit this one */}
     {m?.direct && game && (
-      <DirectPayDialog open={sheet} onOpenChange={setSheet} method={m.direct} amount={amount} game={game} gameUser={(gameUser || "").trim()} promoCode={quote ? promoCode : ""} onSent={onStarted} />
+      <DirectPayDialog open={sheet} onOpenChange={setSheet} method={m.direct} amount={amount} game={game} gameUser={(gameUser || "").trim()} promoCode={quote && !quote.auto ? promoCode : ""} onSent={onStarted} />
     )}
     </>
   );

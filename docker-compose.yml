@@ -61,7 +61,7 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    entrypoint: ["sh", "-c", "while true; do python manage.py sync_deposits; sleep 120; done"]
+    entrypoint: ["sh", "-c", "i=0; while true; do python manage.py sync_deposits; if [ $$((i % 5)) -eq 0 ]; then python manage.py sync_points; fi; i=$$((i+1)); sleep 120; done"]
     environment:
       REDIS_URL: redis://redis:6379/0
       DEBUG: "0"

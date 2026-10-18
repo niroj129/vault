@@ -24,7 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { apiFetch, errorText, mediaUrl } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { dateTime, money, shortDate } from "@/lib/format";
-import { basisLabel } from "@/lib/cashout";
+import { loadLine } from "@/lib/cashout";
 import { useMessengerEvents } from "@/lib/messenger";
 import type { StaffRedeem } from "@/lib/types";
 
@@ -86,7 +86,7 @@ export default function RedeemsPage() {
                   {r.rule && (
                     <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                       <Scale className="size-4" aria-hidden />
-                      Last load {money(r.rule.base)} {basisLabel(r.rule.basis)}{r.rule.load.loaded_at ? ` on ${shortDate(r.rule.load.loaded_at)}` : ""} · allowed {money(r.rule.min)}–{money(r.rule.max)}
+                      {r.rule.free_play ? "Free play" : "Last load"} {loadLine(r.rule)}{r.rule.load.loaded_at ? ` on ${shortDate(r.rule.load.loaded_at)}` : ""} · allowed {money(r.rule.min)}–{money(r.rule.max)}
                       <StatusBadge tone={r.rule.within ? "ok" : "bad"}>{r.rule.within ? "Within rule" : "Outside rule"}</StatusBadge>
                     </p>
                   )}

@@ -90,7 +90,7 @@ class GameDetailSerializer(RatingMixin, serializers.ModelSerializer):
                   "play_url", "user_link", "agent_link", "meta_title",
                   "meta_description", "meta_keywords", "status", "featured",
                   "is_new", "clicks", "views", "sub_points", "vendor_points",
-                  "combined_points", "rating_avg", "rating_count",
+                  "points_synced_at", "combined_points", "rating_avg", "rating_count",
                   "is_favorited", "screenshots", "faqs", "created_at",
                   "provider", "provider_name", "provider_game_code", "self_serve"]
 

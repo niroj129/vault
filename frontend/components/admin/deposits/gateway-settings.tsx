@@ -32,8 +32,13 @@ const schema = z.object({
   cashout_rule_enabled: z.boolean(),
   cashout_min_x: z.string().refine((v) => Number(v) > 0 && Number(v) <= 1000, "Enter a number above 0."),
   cashout_max_x: z.string().refine((v) => Number(v) > 0 && Number(v) <= 1000, "Enter a number above 0."),
-  cashout_basis: z.enum(["loaded", "deposit"]),
-}).refine((v) => Number(v.cashout_max_x) >= Number(v.cashout_min_x), { path: ["cashout_max_x"], message: "Must be at least the minimum." });
+  cashout_min_basis: z.enum(["loaded", "deposit"]),
+  cashout_max_basis: z.enum(["loaded", "deposit"]),
+  freeplay_cashout_enabled: z.boolean(),
+  freeplay_cashout_min_x: z.string().refine((v) => Number(v) > 0 && Number(v) <= 1000, "Enter a number above 0."),
+  freeplay_cashout_max_x: z.string().refine((v) => Number(v) > 0 && Number(v) <= 1000, "Enter a number above 0."),
+}).refine((v) => Number(v.cashout_max_x) >= Number(v.cashout_min_x), { path: ["cashout_max_x"], message: "Must be at least the minimum." })
+  .refine((v) => Number(v.freeplay_cashout_max_x) >= Number(v.freeplay_cashout_min_x), { path: ["freeplay_cashout_max_x"], message: "Must be at least the minimum." });
 type Values = z.infer<typeof schema>;
 
 /** BytePayout keys, which methods players see, bonus, sign-up and cash-out rules. */
@@ -50,7 +55,10 @@ export function GatewaySettings() {
       load_bonus_percent: String(s.load_bonus_percent ?? "0"), redeem_min: String(s.redeem_min ?? "20"), redeem_methods: String(s.redeem_methods || ""),
       redeem_proof: s.redeem_proof === "required" || s.redeem_proof === "off" ? s.redeem_proof : "optional",
       cashout_rule_enabled: s.cashout_rule_enabled !== false, cashout_min_x: String(Number(s.cashout_min_x ?? 3)), cashout_max_x: String(Number(s.cashout_max_x ?? 10)),
-      cashout_basis: s.cashout_basis === "deposit" ? "deposit" : "loaded",
+      cashout_min_basis: s.cashout_min_basis === "deposit" ? "deposit" : "loaded",
+      cashout_max_basis: s.cashout_max_basis === "deposit" ? "deposit" : "loaded",
+      freeplay_cashout_enabled: !!s.freeplay_cashout_enabled,
+      freeplay_cashout_min_x: String(Number(s.freeplay_cashout_min_x ?? 1)), freeplay_cashout_max_x: String(Number(s.freeplay_cashout_max_x ?? 3)),
     })).catch((e) => toast.error(errorText(e)));
     void loadBal();
   }, [token]); // eslint-disable-line react-hooks/exhaustive-deps -- load once
@@ -69,9 +77,17 @@ function SettingsForm({ initial, bal, onSaved }: { initial: Values; bal: { ok: b
       toast.success("Payment settings saved"); form.reset(v); onSaved();
     } catch (e) { form.setError("root", { message: errorText(e) }); }
   }
-  const [ruleOn, lo, hi, basis, siteMin] = form.watch(["cashout_rule_enabled", "cashout_min_x", "cashout_max_x", "cashout_basis", "redeem_min"]);
-  const example = (n: number) => `${money(Math.max(n * Number(lo || 0), Number(siteMin || 0)))} – ${money(n * Number(hi || 0))}`;
-  const toggle = (name: "auto_load" | "load_minus_fee" | "allow_signup" | "redeem_enabled" | "cashout_rule_enabled", label: string, help: string) => (
+  const [ruleOn, lo, hi, loBasis, hiBasis, siteMin, fpOn, fpLo, fpHi] = form.watch(["cashout_rule_enabled", "cashout_min_x", "cashout_max_x", "cashout_min_basis", "cashout_max_basis", "redeem_min", "freeplay_cashout_enabled", "freeplay_cashout_min_x", "freeplay_cashout_max_x"]);
+  // example: the player paid $20 and staff loaded $25 (a bonus)
+  const PAID = 20, LOADED = 25;
+  const baseOf = (b: string) => (b === "deposit" ? PAID : LOADED);
+  const example = `${money(Math.max(baseOf(loBasis) * Number(lo || 0), Number(siteMin || 0)))} – ${money(baseOf(hiBasis) * Number(hi || 0))}`;
+  const fpExample = `${money(Math.max(10 * Number(fpLo || 0), Number(siteMin || 0)))} – ${money(10 * Number(fpHi || 0))}`;
+  const basisChoices = [
+    { value: "loaded", label: "Credits loaded", description: "What staff typed in when they marked it Loaded (includes any bonus)." },
+    { value: "deposit", label: "Money paid", description: "What the player actually sent you." },
+  ];
+  const toggle = (name: "auto_load" | "load_minus_fee" | "allow_signup" | "redeem_enabled" | "cashout_rule_enabled" | "freeplay_cashout_enabled", label: string, help: string) => (
     <Controller control={form.control} name={name} render={({ field }) => (
       <Field orientation="horizontal" className="justify-between rounded-lg border p-3">
         <FieldContent><FieldLabel htmlFor={`gs-${name}`}>{label}</FieldLabel><FieldDescription>{help}</FieldDescription></FieldContent>
@@ -141,18 +157,40 @@ function SettingsForm({ initial, bal, onSaved }: { initial: Values; bal: { ok: b
             <Field data-invalid={!!errors.cashout_max_x}><FieldLabel htmlFor="gs-maxx">Maximum (× the load)</FieldLabel>
               <Input id="gs-maxx" type="number" inputMode="decimal" min="0.1" step="0.5" disabled={!ruleOn} aria-invalid={!!errors.cashout_max_x} {...form.register("cashout_max_x")} />
               <FieldError>{errors.cashout_max_x?.message}</FieldError></Field>
-            <Controller control={form.control} name="cashout_basis" render={({ field }) => (
-              <FieldSet className="sm:col-span-2" disabled={!ruleOn}><FieldLegend variant="label">Multiply</FieldLegend>
-                <ChoiceCards label="Multiply" value={field.value} onChange={field.onChange} className="sm:grid-cols-2" choices={[
-                  { value: "loaded", label: "Credits loaded", description: "What staff typed in when they marked it Loaded (includes any bonus)." },
-                  { value: "deposit", label: "Money paid", description: "What the player actually sent you." },
-                ]} />
+            <Controller control={form.control} name="cashout_min_basis" render={({ field }) => (
+              <FieldSet disabled={!ruleOn}><FieldLegend variant="label">Minimum multiplies</FieldLegend>
+                <ChoiceCards label="Minimum multiplies" value={field.value} onChange={field.onChange} className="grid-cols-1" choices={basisChoices} />
+              </FieldSet>
+            )} />
+            <Controller control={form.control} name="cashout_max_basis" render={({ field }) => (
+              <FieldSet disabled={!ruleOn}><FieldLegend variant="label">Maximum multiplies</FieldLegend>
+                <ChoiceCards label="Maximum multiplies" value={field.value} onChange={field.onChange} className="grid-cols-1" choices={basisChoices} />
               </FieldSet>
             )} />
             {ruleOn && Number(lo) > 0 && Number(hi) >= Number(lo) && (
               <p className="rounded-lg bg-muted p-3 text-sm sm:col-span-2" aria-live="polite">
-                Example: a player who {basis === "deposit" ? "paid" : "got loaded"} <b>$20</b> can cash out <b className="tabular-nums">{example(20)}</b>; <b>$50</b> → <b className="tabular-nums">{example(50)}</b>.
+                Example: a player who <b>paid ${PAID}</b> and was <b>loaded ${LOADED}</b> can cash out <b className="tabular-nums">{example}</b>.
                 The minimum cash out above (${siteMin || 0}) still applies.
+              </p>
+            )}
+          </FieldGroup>
+        </CardContent>
+      </Card>
+      <Card className="glass">
+        <CardHeader><CardTitle className="text-lg"><h2>Free play cash-out rule</h2></CardTitle>
+          <CardDescription>Free play codes load a game with no payment. By default players can&apos;t cash out from them. Turn this on to let them, with a range of their own — each free play code can also set its own range in Promotions.</CardDescription></CardHeader>
+        <CardContent>
+          <FieldGroup className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">{toggle("freeplay_cashout_enabled", "Allow cash outs from free play", "Off: free play credits can be played but never cashed out on their own.")}</div>
+            <Field data-invalid={!!errors.freeplay_cashout_min_x}><FieldLabel htmlFor="gs-fpmin">Minimum (× the free credits)</FieldLabel>
+              <Input id="gs-fpmin" type="number" inputMode="decimal" min="0.1" step="0.5" disabled={!fpOn} aria-invalid={!!errors.freeplay_cashout_min_x} {...form.register("freeplay_cashout_min_x")} />
+              <FieldError>{errors.freeplay_cashout_min_x?.message}</FieldError></Field>
+            <Field data-invalid={!!errors.freeplay_cashout_max_x}><FieldLabel htmlFor="gs-fpmax">Maximum (× the free credits)</FieldLabel>
+              <Input id="gs-fpmax" type="number" inputMode="decimal" min="0.1" step="0.5" disabled={!fpOn} aria-invalid={!!errors.freeplay_cashout_max_x} {...form.register("freeplay_cashout_max_x")} />
+              <FieldError>{errors.freeplay_cashout_max_x?.message}</FieldError></Field>
+            {fpOn && Number(fpLo) > 0 && Number(fpHi) >= Number(fpLo) && (
+              <p className="rounded-lg bg-muted p-3 text-sm sm:col-span-2" aria-live="polite">
+                Example: a <b>$10</b> free play code → the player can cash out <b className="tabular-nums">{fpExample}</b>.
               </p>
             )}
           </FieldGroup>

@@ -27,18 +27,17 @@ class Command(BaseCommand):
         now = timezone.now()
         for tenant in Tenant.objects.filter(is_active=True):
             with use_tenant(tenant):
-                if not bytepayout.configured():
-                    continue
-                pending = Deposit.objects.filter(status=Deposit.Status.PENDING,
-                                                 gateway="bytepayout")
-                for dep in pending.filter(created_at__gte=now - timedelta(hours=3)):
-                    try:
-                        dep = service.sync(dep)
-                        self.stdout.write(f"{tenant.slug} {dep.reference}: {dep.status}")
-                    except bytepayout.PayError as e:
-                        self.stderr.write(f"{tenant.slug} {dep.reference}: {e}")
-                pending.filter(created_at__lt=now - timedelta(hours=3)).update(
-                    status=Deposit.Status.EXPIRED, load_status=Deposit.Load.SKIPPED)
+                if bytepayout.configured():
+                    pending = Deposit.objects.filter(status=Deposit.Status.PENDING,
+                                                     gateway="bytepayout")
+                    for dep in pending.filter(created_at__gte=now - timedelta(hours=3)):
+                        try:
+                            dep = service.sync(dep)
+                            self.stdout.write(f"{tenant.slug} {dep.reference}: {dep.status}")
+                        except bytepayout.PayError as e:
+                            self.stderr.write(f"{tenant.slug} {dep.reference}: {e}")
+                    pending.filter(created_at__lt=now - timedelta(hours=3)).update(
+                        status=Deposit.Status.EXPIRED, load_status=Deposit.Load.SKIPPED)
                 old = Deposit.objects.filter(status=Deposit.Status.APPROVED,
                                              updated_at__lt=now - timedelta(minutes=5))
                 old.filter(load_status=Deposit.Load.LOADING).update(

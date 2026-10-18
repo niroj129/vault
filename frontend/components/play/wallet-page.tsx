@@ -14,6 +14,7 @@ import { apiFetch, errorText } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import type { PlayOptions } from "@/lib/types";
 import { DepositStatus } from "./deposit-status";
+import { FreePlayCard } from "./free-play-card";
 import { History } from "./history";
 import { LoadForm } from "./load-form";
 import { RedeemForm } from "./redeem-form";
@@ -29,6 +30,7 @@ export function WalletPage() {
   const tab = TABS.some(([k]) => k === params.get("tab")) ? params.get("tab")! : "load";
   const preselect = Number(params.get("game")) || null;
   const promoParam = (params.get("promo") || "").slice(0, 40);
+  const freeParam = (params.get("freeplay") || "").slice(0, 40);
   const [opts, setOpts] = useState<PlayOptions | null>(null);
   const [error, setError] = useState("");
   const loadOpts = useCallback(() => { apiFetch<PlayOptions>("/play/options/", { token }).then(setOpts).catch((e) => setError(errorText(e))); }, [token]);
@@ -47,7 +49,8 @@ export function WalletPage() {
           </TabsList>
           {!opts ? <Skeleton className="h-96 rounded-xl" /> : (
             <>
-              <TabsContent value="load">
+              <TabsContent value="load" className="grid gap-4">
+                <FreePlayCard games={opts.games} preselect={preselect} initialCode={freeParam} onRedeemed={(r) => go(`ref=${r}`)} />
                 {opts.payments_on ? <LoadForm opts={opts} preselect={preselect} initialPromo={promoParam} onStarted={(r) => go(`ref=${r}`)} /> : (
                   <Empty className="border"><EmptyHeader><EmptyMedia variant="icon"><Wallet aria-hidden /></EmptyMedia><EmptyTitle>Online payments aren&apos;t on yet</EmptyTitle>
                     <EmptyDescription>Message support and an agent will load your game.</EmptyDescription></EmptyHeader>

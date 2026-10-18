@@ -89,7 +89,9 @@ export function DepositStatus({ refId, onNew }: { refId: string; onNew: () => vo
   const failed = ["rejected", "expired", "failed"].includes(d.status);
   const paid = d.status === "approved";
   const loaded = d.load_status === "loaded";
-  const steps: [string, StepState][] = d.direct
+  const steps: [string, StepState][] = d.free_play
+    ? [["Code accepted", "done"], ["Loading your game", loaded ? "done" : failed ? "bad" : "now"], ["Credits loaded", loaded ? "done" : "todo"]]
+    : d.direct
     ? [["Sent", "done"], ["Payment checked", failed ? "bad" : paid ? "done" : "now"], ["Credits loaded", loaded ? "done" : paid ? "now" : "todo"]]
     : [["Pay", failed ? "bad" : paid ? "done" : "now"], ["Payment confirmed", paid ? "done" : "todo"], ["Credits loaded", loaded ? "done" : paid ? "now" : "todo"]];
 
@@ -100,8 +102,8 @@ export function DepositStatus({ refId, onNew }: { refId: string; onNew: () => vo
           <span className="relative size-14 shrink-0 overflow-hidden rounded-lg"><Image src={mediaUrl(d.game.logo || d.game.thumbnail)} alt="" fill sizes="56px" className="object-cover" /></span>
         )}
         <div className="grid">
-          <p className="text-sm text-muted-foreground">{d.method_label} · {d.direct ? <>code <b className="font-mono">{d.code}</b></> : `ref ${d.reference.slice(-8)}`}</p>
-          <h2 className="text-2xl">{money(d.amount)} for {d.game?.name || "your game"}</h2>
+          <p className="text-sm text-muted-foreground">{d.method_label} · {d.free_play ? <>code <b className="font-mono">{d.promo_code}</b></> : d.direct ? <>code <b className="font-mono">{d.code}</b></> : `ref ${d.reference.slice(-8)}`}</p>
+          <h2 className="text-2xl">{d.free_play ? `${money(d.credit_amount)} free play on ${d.game?.name || "your game"}` : `${money(d.amount)} for ${d.game?.name || "your game"}`}</h2>
         </div>
       </CardHeader>
       <CardContent className="grid gap-5">
@@ -153,7 +155,7 @@ export function DepositStatus({ refId, onNew }: { refId: string; onNew: () => vo
         )}
 
         {paid && (d.load_status === "queued" || d.load_status === "loading") && (
-          <p className="flex items-center gap-3 rounded-lg bg-muted p-4"><Spinner className="size-5" aria-hidden />Payment received — loading {d.game?.name}…</p>
+          <p className="flex items-center gap-3 rounded-lg bg-muted p-4"><Spinner className="size-5" aria-hidden />{d.free_play ? "Free play accepted" : "Payment received"} — loading {d.game?.name}…</p>
         )}
 
         {loaded && (
@@ -172,7 +174,7 @@ export function DepositStatus({ refId, onNew }: { refId: string; onNew: () => vo
         {paid && (d.load_status === "failed" || d.load_status === "manual") && (
           <div className="grid justify-items-center gap-2 py-2 text-center">
             <Headset className="size-12 text-warning" aria-hidden />
-            <h3 className="text-xl">Payment received</h3>
+            <h3 className="text-xl">{d.free_play ? "Free play accepted" : "Payment received"}</h3>
             <p className="max-w-prose text-muted-foreground">Our team is loading {d.game?.name || "your game"} now. You&apos;ll get a message in Support and a notification the moment it&apos;s done.</p>
             <Button asChild className="mt-2"><Link href="/messages?c=support"><MessageCircle aria-hidden />Message support</Link></Button>
           </div>

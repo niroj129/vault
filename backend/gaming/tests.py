@@ -388,7 +388,8 @@ class CashoutRuleTests(ManualFlowTests):
         super().setUp()
         with use_tenant(self.a):
             s = SiteSettings.load()
-            s.redeem_min, s.cashout_min_x, s.cashout_max_x, s.cashout_basis = 10, 3, 10, "loaded"
+            s.redeem_min, s.cashout_min_x, s.cashout_max_x = 10, 3, 10
+            s.cashout_min_basis = s.cashout_max_basis = "loaded"
             s.save()
             GameLogin.objects.create(user=self.ann, game=self.game, username="ann_juwa7")
         self.admin_c = client_for(A, "admin")
@@ -437,10 +438,65 @@ class CashoutRuleTests(ManualFlowTests):
 
     def test_basis_money_paid_and_admin_multipliers(self):
         with use_tenant(self.a):
-            SiteSettings.objects.update(cashout_basis="deposit", cashout_min_x=2, cashout_max_x=5)
+            SiteSettings.objects.update(cashout_min_basis="deposit", cashout_max_basis="deposit", cashout_min_x=2, cashout_max_x=5)
         self.load(20, loaded=30)
         rule = self.rule()
         self.assertEqual((Decimal(rule["min"]), Decimal(rule["max"])), (Decimal("40"), Decimal("100")))
+
+    def test_minimum_and_maximum_can_use_different_bases(self):
+        # paid $20, staff loaded $50 (a bonus)
+        with use_tenant(self.a):
+            SiteSettings.objects.update(cashout_min_basis="deposit", cashout_min_x=2,
+                                        cashout_max_basis="loaded", cashout_max_x=3)
+        self.load(20, loaded=50)
+        rule = self.rule()
+        self.assertEqual((Decimal(rule["min"]), Decimal(rule["max"])), (Decimal("40"), Decimal("150")))
+        self.assertEqual((rule["min_basis"], rule["max_basis"]), ("deposit", "loaded"))
+        self.assertEqual((Decimal(rule["min_base"]), Decimal(rule["max_base"])), (Decimal("20"), Decimal("50")))
+        with use_tenant(self.a):  # and the other way round
+            SiteSettings.objects.update(cashout_min_basis="loaded", cashout_min_x=1,
+                                        cashout_max_basis="deposit", cashout_max_x=5)
+        rule = self.rule()
+        self.assertEqual((Decimal(rule["min"]), Decimal(rule["max"])), (Decimal("50"), Decimal("100")))
+
+    def free_play(self, loaded=10, **promo):
+        from content.models import Promo
+        with use_tenant(self.a):
+            Promo.objects.create(title="Free", code="FREE", free_credits=loaded, **promo)
+        r = self.ann_c.post("/api/play/freeplay/", {"game": self.game.id, "code": "FREE"}, format="json")
+        self.assertEqual(r.status_code, 201, r.data)
+        with self.captureOnCommitCallbacks(execute=True):
+            r = self.admin_c.post(f"/api/admin/deposits/{r.data['id']}/mark-loaded/", {}, format="json")
+        self.assertEqual(r.data["load_status"], "loaded", r.data)
+
+    def test_free_play_has_its_own_cash_out_rule(self):
+        self.free_play(10)
+        self.assertFalse(self.rule()["ok"])  # off by default: free play never unlocks a cash out
+        with use_tenant(self.a):
+            SiteSettings.objects.update(freeplay_cashout_enabled=True, freeplay_cashout_min_x=1, freeplay_cashout_max_x=3)
+        rule = self.rule()
+        self.assertTrue(rule["ok"] and rule["free_play"], rule)
+        self.assertEqual((Decimal(rule["min"]), Decimal(rule["max"])), (Decimal("10"), Decimal("30")))  # not the 3×–10× rule
+        self.assertEqual(self.ask(31).status_code, 400)
+        r = self.ask(30)
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertTrue(r.data["rule"]["free_play"])
+
+    def test_a_free_play_code_can_override_the_free_play_rule(self):
+        with use_tenant(self.a):
+            SiteSettings.objects.update(freeplay_cashout_enabled=True)
+        self.free_play(10, freeplay_min_x=2, freeplay_max_x=5)
+        rule = self.rule()
+        self.assertEqual((Decimal(rule["min"]), Decimal(rule["max"])), (Decimal("20"), Decimal("50")))
+
+    def test_last_load_wins_between_free_play_and_a_paid_load(self):
+        with use_tenant(self.a):
+            SiteSettings.objects.update(freeplay_cashout_enabled=True)
+        self.free_play(10)
+        self.load(100)  # later, paid: the normal 3×–10× rule applies
+        rule = self.rule()
+        self.assertFalse(rule["free_play"])
+        self.assertEqual((Decimal(rule["min"]), Decimal(rule["max"])), (Decimal("300"), Decimal("1000")))
 
     def test_declined_cash_out_frees_the_load(self):
         self.load(10)
@@ -639,3 +695,185 @@ class PromoCodeTests(TestCase):
         ok = c.post("/api/promos/", {"title": "New", "code": "new 10", "bonus_percent": 10}, format="json")
         self.assertEqual(ok.status_code, 201, ok.content)
         self.assertEqual(ok.data["code"], "NEW10")
+
+
+@override_settings(GAMING_SYNC_LOADS=True)
+@mock.patch("gaming.service.adapter_for", FakeAdapter)
+class PromoTargetingTests(TestCase):
+    """Promotions for chosen players only / hidden from some players, and automatic ones."""
+    start = DepositFlowTests.start
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        DepositFlowTests.setUp(self)
+        self.bob = make_user(self.a, "bob")
+        self.bob_c = client_for(A, "bob")
+        self.admin_c = client_for(A, "admin")
+
+    def promo(self, players=(), **kw):
+        from content.models import Promo
+        with use_tenant(self.a):
+            p = Promo.objects.create(**{"title": "T", "code": "VIP", "bonus_percent": 10, **kw})
+            p.players.set(players)
+        return p
+
+    def deposit(self, client, **kw):
+        body = {"game": self.game.id, "method": "chime", "amount": 50, "replace": True, **kw}
+        with mock.patch("gaming.bytepayout.create_deposit") as cd:
+            cd.side_effect = lambda m, a, pid, ref, ret: {
+                "id": "bp1", "status": "pending", "provider": m, "amount": float(a),
+                "fee_amount": 0, "reference": ref, "checkout_url": "https://pay.example/c",
+                "expires_at": "2026-10-04T12:00:00.000Z"}
+            return client.post("/api/play/deposits/", body, format="json")
+
+    def test_only_listed_players_can_use_a_targeted_code(self):
+        self.promo(players=[self.ann], audience="only")
+        self.assertEqual(self.deposit(self.ann_c, promo_code="vip").status_code, 201)
+        r = self.deposit(self.bob_c, promo_code="vip")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("isn't valid", r.data["detail"])  # doesn't reveal that the code exists
+
+    def test_hidden_from_listed_players_but_open_to_everyone_else(self):
+        self.promo(players=[self.ann], audience="except")
+        self.assertEqual(self.deposit(self.ann_c, promo_code="vip").status_code, 400)
+        self.assertEqual(self.deposit(self.bob_c, promo_code="vip").status_code, 201)
+
+    def test_targeted_promos_are_invisible_to_everyone_but_their_players(self):
+        self.promo(code="ALLP", audience="all")
+        self.promo(code="ONLYANN", players=[self.ann], audience="only")
+        self.promo(code="NOTANN", players=[self.ann], audience="except")
+        codes = lambda r: sorted(p["code"] for p in r.data)  # noqa: E731
+        self.assertEqual(codes(client_for(A).get("/api/promos/")), ["ALLP"])           # public
+        self.assertEqual(codes(self.ann_c.get("/api/promos/")), ["ALLP"])
+        self.assertEqual(codes(self.ann_c.get("/api/promos/mine/")), ["ALLP", "ONLYANN"])
+        self.assertEqual(codes(self.bob_c.get("/api/promos/mine/")), ["ALLP", "NOTANN"])
+        self.assertEqual(len(self.admin_c.get("/api/promos/").data), 3)                # staff see all
+        self.assertEqual(client_for(A).get("/api/promos/mine/").status_code, 401)
+
+    def test_automatic_promo_needs_no_code(self):
+        self.promo(code="", auto_apply=True, bonus_percent=20, usage="recurring")
+        r = self.deposit(self.ann_c)
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(Decimal(str(r.data["bonus_amount"])), Decimal("10.00"))
+        self.assertEqual(r.data["promo_code"], "AUTO")
+        prev = self.ann_c.post("/api/play/promo/check/", {"amount": 50}, format="json")
+        self.assertTrue(prev.data["auto"])
+        self.assertEqual(Decimal(str(prev.data["credits"])), Decimal("60.00"))
+
+    def test_automatic_one_time_promo_is_used_up_and_targeting_applies(self):
+        self.promo(code="", auto_apply=True, players=[self.ann], audience="only")
+        self.assertEqual(Decimal(str(self.deposit(self.ann_c).data["bonus_amount"])), Decimal("5.00"))
+        self.assertEqual(Decimal(str(self.deposit(self.ann_c).data["bonus_amount"])), Decimal("0"))  # once per player
+        self.assertEqual(Decimal(str(self.deposit(self.bob_c).data["bonus_amount"])), Decimal("0"))  # not listed
+        self.assertEqual(self.bob_c.post("/api/play/promo/check/", {"amount": 50}, format="json").data, {"valid": False})
+
+    def test_best_automatic_promo_wins_and_a_typed_code_overrides(self):
+        self.promo(code="", auto_apply=True, bonus_percent=10, usage="recurring")
+        self.promo(code="", title="Big", auto_apply=True, bonus_percent=30, usage="recurring")
+        self.promo(code="MINE", bonus_percent=5, usage="recurring")
+        self.assertEqual(Decimal(str(self.deposit(self.ann_c).data["bonus_amount"])), Decimal("15.00"))
+        self.assertEqual(Decimal(str(self.deposit(self.ann_c, promo_code="MINE").data["bonus_amount"])), Decimal("2.50"))
+
+    def test_admin_picks_players_and_validation(self):
+        p = self.promo(audience="only")
+        r = self.admin_c.put(f"/api/promos/{p.id}/players/", {"user_ids": [self.ann.id, self.bob.id]}, format="json")
+        self.assertEqual(sorted(u["username"] for u in r.data), ["ann", "bob"])
+        self.assertEqual(self.admin_c.get(f"/api/promos/{p.id}/").data["player_count"], 2)
+        self.assertEqual(self.ann_c.put(f"/api/promos/{p.id}/players/", {"user_ids": []}, format="json").status_code, 403)
+        bad = self.admin_c.post("/api/promos/", {"title": "A", "auto_apply": True}, format="json")
+        self.assertEqual(bad.status_code, 400)  # automatic but no bonus
+        ok = self.admin_c.post("/api/promos/", {"title": "A", "auto_apply": True, "bonus_percent": 5}, format="json")
+        self.assertEqual(ok.status_code, 201, ok.content)  # no code needed when automatic
+
+
+@override_settings(GAMING_SYNC_LOADS=True)
+@mock.patch("gaming.service.adapter_for", FakeAdapter)
+class FreePlayAndPointsTests(TestCase):
+    """Free play codes load a game with no payment; API-connected games get live points."""
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        DepositFlowTests.setUp(self)
+        self.bob = make_user(self.a, "bob")
+        self.bob_c = client_for(A, "bob")
+
+    def code(self, **kw):
+        from content.models import Promo
+        with use_tenant(self.a):
+            p = Promo.objects.create(**{"title": "Free", "code": "FREE10", "free_credits": 10, **kw})
+        return p
+
+    def redeem(self, client=None, code="free10", **kw):
+        return (client or self.ann_c).post("/api/play/freeplay/", {"game": self.game.id, "code": code, **kw}, format="json")
+
+    def test_free_play_loads_the_game_by_api_without_payment(self):
+        self.code()
+        with self.captureOnCommitCallbacks(execute=True):
+            r = self.redeem()
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertTrue(r.data["free_play"])
+        self.assertEqual(Decimal(str(r.data["credit_amount"])), Decimal("10.00"))
+        with use_tenant(self.a):
+            d = Deposit.objects.get(reference=r.data["reference"])
+            self.assertEqual((d.status, d.load_status, d.amount), ("approved", "loaded", Decimal("0")))
+        loads = [c for c in FakeAdapter.calls if c[0] == "load"]
+        self.assertEqual(len(loads), 1)
+        self.assertEqual(loads[0][2], "10.00")
+        with use_tenant(self.a):
+            self.assertEqual(type(self.ann).objects.get(pk=self.ann.pk).loyalty_points, 0)  # no VIP points for free play
+
+    def test_one_time_and_targeting_and_limits_apply(self):
+        self.code(audience="only")
+        self.assertEqual(self.redeem(self.bob_c).status_code, 400)  # not on the list
+        with use_tenant(self.a):
+            from content.models import Promo
+            Promo.objects.get(code="FREE10").players.set([self.ann])
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(self.redeem().status_code, 201)
+        again = self.redeem()
+        self.assertEqual(again.status_code, 400)
+        self.assertIn("already used", again.data["detail"])
+
+    def test_non_free_codes_and_unknown_codes_are_refused(self):
+        self.code(code="BONUS", free_credits=0, bonus_percent=10)
+        self.assertEqual(self.redeem(code="BONUS").status_code, 400)
+        self.assertEqual(self.redeem(code="nope").status_code, 400)
+        # and a free play code can't be typed into a paid deposit
+        r = self.ann_c.post("/api/play/promo/check/", {"code": "FREE10", "amount": 50}, format="json")
+        self.code()
+        r = self.ann_c.post("/api/play/promo/check/", {"code": "FREE10", "amount": 50}, format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("free play", r.data["detail"].lower())
+
+    def test_game_without_an_api_goes_to_staff_to_load(self):
+        self.code()
+        with use_tenant(self.a):
+            manual = Game.objects.create(name="Hand Game")
+        r = self.ann_c.post("/api/play/freeplay/", {"game": manual.id, "code": "FREE10"}, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.data["load_status"], "manual")
+
+    def test_free_play_alone_never_unlocks_a_cash_out(self):
+        from . import cashout
+        self.code()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.redeem()
+        with use_tenant(self.a):
+            self.assertIsNone(cashout.last_load(self.ann, self.game))
+
+    def test_points_are_pulled_from_the_connected_platform(self):
+        class Bal(FakeAdapter):
+            def agent_balance(self):
+                return Result(True, "OK", balance="1,234.50")
+        from . import service
+        with use_tenant(self.a), mock.patch("gaming.service.adapter_for", Bal):
+            self.assertEqual(service.sync_points(), 1)
+            g = Game.objects.get(pk=self.game.pk)
+            self.assertEqual(g.vendor_points, Decimal("1234.50"))
+            self.assertIsNotNone(g.points_synced_at)
+        c = client_for(A, "admin")
+        with mock.patch("gaming.service.adapter_for", Bal):
+            self.assertEqual(c.post("/api/admin/points/sync/").data, {"synced": 1})
+        self.assertEqual(self.ann_c.post("/api/admin/points/sync/").status_code, 403)

@@ -174,6 +174,47 @@ def _promo_holds(promo):
         | Q(status=Deposit.Status.PENDING, created_at__gte=recent))
 
 
+def promo_eligible(promo, user):
+    """Is this promotion offered to this player (Everyone / Only the listed / Everyone except them)?"""
+    if promo.audience == "all":
+        return True
+    listed = promo.players.filter(pk=user.pk).exists()
+    return listed if promo.audience == "only" else not listed
+
+
+def _check_access(promo, user):
+    """Is this player allowed to use this promo right now (audience, dates, use limits)?"""
+    if not promo_eligible(promo, user):
+        raise PromoError("That promo code isn't valid.")
+    today = timezone.localdate()
+    if promo.starts and promo.starts > today:
+        raise PromoError(f"That code starts on {promo.starts:%b %d}.")
+    if promo.expires and promo.expires < today:
+        raise PromoError("That code has expired.")
+    holds = _promo_holds(promo)
+    if promo.usage == promo.Usage.ONCE and holds.filter(user=user).exists():
+        raise PromoError("You've already used that code.")
+    if promo.max_uses and holds.count() >= promo.max_uses:
+        raise PromoError("That code has been fully claimed.")
+
+
+def _check_promo(promo, user, amount):
+    """Everything that must hold for this promo on this deposit. Returns the bonus
+    or raises PromoError."""
+    _check_access(promo, user)
+    pct, flat = Decimal(promo.bonus_percent or 0), Decimal(promo.bonus_flat or 0)
+    if pct <= 0 and flat <= 0:
+        if promo.free_credits > 0:
+            raise PromoError("That's a free play code — use “Redeem free play” instead of paying.")
+        raise PromoError("That code can't be applied at checkout — ask your agent about it.")
+    if promo.min_deposit and amount < promo.min_deposit:
+        raise PromoError(f"That code needs a deposit of at least ${promo.min_deposit:g}.")
+    bonus = amount * pct / 100 + flat
+    if promo.max_bonus and bonus > promo.max_bonus:
+        bonus = Decimal(promo.max_bonus)
+    return bonus.quantize(Decimal("0.01"))
+
+
 def promo_quote(user, code, amount, lock=False):
     """Check a promo code for this player and deposit. Returns (promo, bonus).
     Raises PromoError with a message fit to show the player. With lock=True the
@@ -187,26 +228,77 @@ def promo_quote(user, code, amount, lock=False):
     promo = (qs.select_for_update() if lock else qs).first()
     if not promo:
         raise PromoError("That promo code isn't valid.")
-    today = timezone.localdate()
-    if promo.starts and promo.starts > today:
-        raise PromoError(f"That code starts on {promo.starts:%b %d}.")
-    if promo.expires and promo.expires < today:
-        raise PromoError("That code has expired.")
-    pct, flat = Decimal(promo.bonus_percent or 0), Decimal(promo.bonus_flat or 0)
-    if pct <= 0 and flat <= 0:
-        raise PromoError("That code can't be applied at checkout — ask your agent about it.")
+    return promo, _check_promo(promo, user, Decimal(str(amount)))
+
+
+def redeem_freeplay(user, code, game, login):
+    """A free play code: credits on the game with no payment. Loads by API when the game
+    has one (and auto-load is on), otherwise goes to staff as a load to do by hand.
+    Call inside transaction.atomic(). Returns the Deposit."""
+    from content.models import Promo
+    promo = Promo.objects.select_for_update().filter(code__iexact=(code or "").strip(), active=True).first()
+    if not promo or promo.free_credits <= 0:
+        raise PromoError("That isn't a free play code.")
+    _check_access(promo, user)
+    auto = is_automated(game) and SiteSettings.load().auto_load
+    dep = Deposit.objects.create(
+        user=user, game=game, login=login, method="freeplay", gateway="freeplay", amount=0,
+        credit_amount=promo.free_credits, promo=promo, promo_code=promo.code.upper(),
+        bonus_amount=promo.free_credits, status=Deposit.Status.APPROVED, approved_at=timezone.now(),
+        load_status=Deposit.Load.QUEUED if auto else Deposit.Load.MANUAL, note="Free play")
+    if auto:
+        queue_load(dep.pk)
+    on_commit_here(_notify_status, dep.pk)
+    return dep
+
+
+def apply_agent_balance(provider, balance):
+    """Games on an API-connected platform show that platform's live agent points."""
+    from catalog.models import Game
+    Game.objects.filter(provider=provider).update(
+        vendor_points=balance, sub_points=0, points_synced_at=timezone.now())
+
+
+def sync_points():
+    """Pull the agent points from every connected game platform (current site).
+    Returns how many platforms updated."""
+    n = 0
+    for p in GameProvider.objects.filter(is_active=True).exclude(kind=GameProvider.Kind.MANUAL):
+        try:
+            res = adapter_for(p).agent_balance()
+            bal = Decimal(str(res.balance).replace(",", "").replace("$", "")) if res.ok and res.balance not in (None, "") else None
+        except Exception as e:  # one platform being down must not stop the rest
+            GameProvider.objects.filter(pk=p.pk).update(last_checked=timezone.now(), last_error=str(e)[:300])
+            continue
+        if bal is None:
+            continue
+        GameProvider.objects.filter(pk=p.pk).update(
+            last_checked=timezone.now(), last_error="", last_agent_balance=str(bal))
+        apply_agent_balance(p, bal)
+        n += 1
+    return n
+
+
+def auto_promo(user, amount, lock=False):
+    """The best automatic promotion this player qualifies for on this deposit, as
+    (promo, bonus) — or (None, 0). One promotion per deposit: the biggest bonus wins."""
+    from content.models import Promo
     amount = Decimal(str(amount))
-    if promo.min_deposit and amount < promo.min_deposit:
-        raise PromoError(f"That code needs a deposit of at least ${promo.min_deposit:g}.")
-    holds = _promo_holds(promo)
-    if promo.usage == promo.Usage.ONCE and holds.filter(user=user).exists():
-        raise PromoError("You've already used that code.")
-    if promo.max_uses and holds.count() >= promo.max_uses:
-        raise PromoError("That code has been fully claimed.")
-    bonus = amount * pct / 100 + flat
-    if promo.max_bonus and bonus > promo.max_bonus:
-        bonus = Decimal(promo.max_bonus)
-    return promo, bonus.quantize(Decimal("0.01"))
+    best = None
+    for p in Promo.objects.filter(active=True, auto_apply=True).order_by("sort_order", "id"):
+        try:
+            bonus = _check_promo(p, user, amount)
+        except PromoError:
+            continue
+        if best is None or bonus > best[1]:
+            best = (p, bonus)
+    if best and lock:  # re-check under a row lock so a one-time offer can't be claimed twice at once
+        locked = Promo.objects.select_for_update().get(pk=best[0].pk)
+        try:
+            return locked, _check_promo(locked, user, amount)
+        except PromoError:
+            return None, Decimal("0")
+    return best or (None, Decimal("0"))
 
 
 def apply_gateway(dep, data):
@@ -334,7 +426,7 @@ def run_load(dep_id, operator="auto", force=False):
         load_error=error[:300], loaded_at=None if error else timezone.now(),
         game_txn=txn, login=login, updated_at=timezone.now())
     dep.refresh_from_db()
-    if dep.load_status == Deposit.Load.LOADED:
+    if dep.load_status == Deposit.Load.LOADED and dep.gateway != "freeplay":
         award_points(dep.user, dep.loaded_amount or dep.credit_amount or dep.amount)
     _notify_load(dep)
     return dep
@@ -378,7 +470,17 @@ def _notify_status(dep_id):
         return
     game = dep.game.name if dep.game else "your game"
     if dep.status == Deposit.Status.APPROVED:
-        if dep.load_status == Deposit.Load.MANUAL:
+        if dep.load_status == Deposit.Load.MANUAL and dep.gateway == "freeplay":
+            uname = _who(dep)
+            notify.event(
+                dep.user, "Free play accepted",
+                f"{usd(dep.credit_amount)} of free play for {game}. We're loading it now — "
+                "you'll get a message when it's done.", tone="ok",
+                staff_text=f"@{dep.user.username} redeemed free play {dep.promo_code} — load "
+                           f"{usd(dep.credit_amount)} on {game}: {uname or 'NO USERNAME YET — create one'}")
+            _alert_staff(f"🎁 {dep.user.username} redeemed free play {dep.promo_code} — "
+                         f"load {usd(dep.credit_amount)} on {game} for {uname or '(needs username)'}")
+        elif dep.load_status == Deposit.Load.MANUAL:
             uname = _who(dep)
             notify.event(
                 dep.user, "Payment received",
@@ -458,7 +560,8 @@ def mark_loaded(dep, staff, note="", amount=None):
         dep.game_txn, dep.login = txn, login
         dep.note = f"Loaded by {staff.username}"[:200]
         dep.save()
-    award_points(dep.user, dep.loaded_amount)
+    if dep.gateway != "freeplay":
+        award_points(dep.user, dep.loaded_amount)
     on_commit_here(_notify_load, dep)
     return dep
 
