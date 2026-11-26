@@ -7,6 +7,8 @@ const backend = (process.env.INTERNAL_API_URL || "http://127.0.0.1:8000").replac
 const nextConfig = {
   reactStrictMode: true,
   output: "standalone",
+  // the link-preview route reads these at runtime
+  outputFileTracingIncludes: { "/og": ["./assets/fonts/**"] },
   // Django routes end in "/" — don't let Next strip it
   skipTrailingSlashRedirect: true,
   images: {

@@ -23,6 +23,11 @@ export async function generateMetadata(): Promise<Metadata> {
   const [settings, SITE_URL] = await Promise.all([getJSONSafe<SiteSettings>("/settings/", {}), siteUrl()]);
   const name = settings.site_name || "Casino";
   const tagline = settings.tagline || "Play premium sweepstakes games.";
+  // Link-preview card: an uploaded image wins, else the generated 1200×630 card (app/og/route.tsx).
+  // SVG is never used here — Facebook, X, WhatsApp and iMessage don't render it.
+  const preview = settings.social_preview && !/\.svg($|\?)/i.test(settings.social_preview)
+    ? { url: settings.social_preview, alt: name }
+    : { url: "/og", width: 1200, height: 630, alt: `${name} — ${tagline}` };
   return {
     metadataBase: new URL(SITE_URL),
     title: { default: `${name} — ${tagline}`, template: `%s | ${name}` },
@@ -30,9 +35,9 @@ export async function generateMetadata(): Promise<Metadata> {
     keywords: ["sweepstakes casino", "social casino", "fish games", "slot games", "Juwa", "Game Vault", "Orion Stars", "Fire Kirin", "casino agents"],
     openGraph: {
       type: "website", siteName: name, url: SITE_URL, title: `${name} — Sweepstakes & Social Casino`, description: tagline,
-      images: [{ url: settings.social_preview || "/icon.svg", alt: name }],
+      images: [preview],
     },
-    twitter: { card: "summary_large_image" },
+    twitter: { card: "summary_large_image", title: `${name} — Sweepstakes & Social Casino`, description: tagline, images: [preview] },
     robots: { index: true, follow: true },
     icons: { icon: settings.favicon || "/icon.svg" },
     verification: settings.gsc_verification ? { google: String(settings.gsc_verification) } : undefined,
