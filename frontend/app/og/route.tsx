@@ -24,13 +24,24 @@ const fonts = Promise.all(
   })),
 );
 
-/** Fetch an image as a data URI (Satori can't read WebP/SVG reliably). Never throws. */
-async function dataUri(src: string | null | undefined, base: string): Promise<string | null> {
+type Sharp = typeof import("sharp");
+let sharpMod: Promise<Sharp | null> | undefined;
+/** sharp ships with Next for image optimisation; null if it can't load on this host. */
+const loadSharp = () => (sharpMod ??= import("sharp").then((m) => m.default as unknown as Sharp).catch(() => null));
+
+/** Fetch an image as a data URI, shrunk to the size it is drawn at (decoding full-size
+    uploads is what makes a render slow). Satori can't read WebP/SVG reliably. Never throws. */
+async function dataUri(src: string | null | undefined, base: string, w: number, h: number): Promise<string | null> {
   if (!src) return null;
   try {
-    const res = await fetch(new URL(src, base), { signal: AbortSignal.timeout(4000), next: { revalidate: 3600 } });
+    const res = await fetch(new URL(src, base), { signal: AbortSignal.timeout(4000), cache: "no-store" });
     if (!res.ok) return null;
     const buf = Buffer.from(await res.arrayBuffer());
+    const sharp = await loadSharp();
+    if (sharp) {
+      const small = await sharp(buf).resize(w * 2, h * 2, { fit: "cover" }).jpeg({ quality: 82 }).toBuffer();
+      return `data:image/jpeg;base64,${small.toString("base64")}`;
+    }
     // uploads are often mislabelled (a JPEG saved as .png), so trust the bytes, not the extension
     const type = buf[0] === 0xff && buf[1] === 0xd8 ? "image/jpeg"
       : buf.subarray(0, 4).toString("hex") === "89504e47" ? "image/png"
@@ -43,12 +54,40 @@ async function dataUri(src: string | null | undefined, base: string): Promise<st
 
 const luminous = (hex: string) => contrast(hex, "#000000");
 
+/* Rendering is CPU-heavy and blocks the Node event loop, and link crawlers (Facebook
+   sends dozens of requests at once) would otherwise take the whole site down. So each
+   site's card is rendered once, shared by every request that arrives meanwhile, and
+   kept for an hour. */
+const TTL = 60 * 60 * 1000;
+type Card = { body: Uint8Array; type: string; at: number };
+const cards = new Map<string, Card>();
+const rendering = new Map<string, Promise<Card>>();
+const CACHE = "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400";
+
+const send = (c: Card) => new Response(c.body.slice(), { headers: { "Content-Type": c.type, "Cache-Control": CACHE } });
+
 export async function GET() {
-  const [settings, featured, all, base] = await Promise.all([
+  const base = await siteUrl();
+  const key = new URL(base).host;
+  const hit = cards.get(key);
+  if (hit && Date.now() - hit.at < TTL) return send(hit);
+  let job = rendering.get(key);
+  if (!job) {
+    job = render(base)
+      .then((c) => { cards.set(key, c); return c; })
+      .finally(() => rendering.delete(key));
+    rendering.set(key, job);
+  }
+  // a stale card is still a fine preview: serve it while the new one renders
+  if (hit) return send(hit);
+  return send(await job);
+}
+
+async function render(base: string): Promise<Card> {
+  const [settings, featured, all] = await Promise.all([
     getJSONSafe<SiteSettings>("/settings/", {}),
     getJSONSafe<Game[]>("/games/?featured=1", []),
     getJSONSafe<Game[]>("/games/", []),
-    siteUrl(),
   ]);
   const name = settings.site_name || "Casino";
   const tagline = settings.tagline || "Play premium sweepstakes games.";
@@ -67,9 +106,10 @@ export async function GET() {
 
   const pool = [...featured, ...all.filter((g) => !featured.some((f) => f.id === g.id))];
   const picks = pool.filter((g) => g.thumbnail).slice(0, 4);
+  const [tw, th] = picks.length === 1 ? [300, 400] : [198, 264];
   const [logo, ...thumbs] = await Promise.all([
-    dataUri(settings.logo, base),
-    ...picks.map((g) => dataUri(g.thumbnail, base)),
+    dataUri(settings.logo, base, 92, 92),
+    ...picks.map((g) => dataUri(g.thumbnail, base, tw, th)),
   ]);
   const art = thumbs.filter((t): t is string => !!t);
   const gameNames = (picks.length ? picks : pool).slice(0, 3).map((g) => g.name);
@@ -134,7 +174,7 @@ export async function GET() {
           <div style={{ display: "flex", flexWrap: "wrap", alignContent: "center", justifyContent: "center",
             gap: 22, width: W - 660, padding: "0 48px 0 8px" }}>
             {art.map((src, i) => {
-              const [w, h] = art.length === 1 ? [300, 400] : [198, 264];
+              const [w, h] = [tw, th];
               return (
                 <div key={i} style={{ display: "flex", width: w, height: h, borderRadius: 26, overflow: "hidden",
                   transform: `rotate(${tilt[i]}deg)`, border: "4px solid #FFFFFF33", boxShadow: "0 24px 48px #00000080" }}>
@@ -148,19 +188,10 @@ export async function GET() {
     ),
     { width: W, height: H, fonts: await fonts },
   );
-  return jpegOf(await png.arrayBuffer());
-}
-
-const CACHE = "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400";
-
-/** Photos of game art make a ~600 KB PNG; WhatsApp drops previews much over 300 KB,
-    so re-encode as JPEG with sharp (Next's own image dependency). PNG if sharp is unavailable. */
-async function jpegOf(png: ArrayBuffer): Promise<Response> {
-  try {
-    const sharp = (await import("sharp")).default;
-    const jpg = await sharp(Buffer.from(png)).jpeg({ quality: 84, mozjpeg: true }).toBuffer();
-    return new Response(new Uint8Array(jpg), { headers: { "Content-Type": "image/jpeg", "Cache-Control": CACHE } });
-  } catch {
-    return new Response(png, { headers: { "Content-Type": "image/png", "Cache-Control": CACHE } });
-  }
+  const raw = new Uint8Array(await png.arrayBuffer());
+  // ~600 KB as PNG; WhatsApp drops previews much over 300 KB, so send JPEG when sharp is here
+  const sharp = await loadSharp();
+  if (!sharp) return { body: raw, type: "image/png", at: Date.now() };
+  const jpg = await sharp(raw).jpeg({ quality: 84, mozjpeg: true }).toBuffer();
+  return { body: new Uint8Array(jpg), type: "image/jpeg", at: Date.now() };
 }
