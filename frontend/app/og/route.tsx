@@ -66,9 +66,10 @@ const CACHE = "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400
 
 const send = (c: Card) => new Response(c.body.slice(), { headers: { "Content-Type": c.type, "Cache-Control": CACHE } });
 
-export async function GET() {
+export async function GET(req: Request) {
   const base = await siteUrl();
-  const key = new URL(base).host;
+  // ?v= changes with the site's name/tagline/logo/colours (see layout), so a new version renders fresh
+  const key = `${new URL(base).host}|${new URL(req.url).searchParams.get("v") || ""}`;
   const hit = cards.get(key);
   if (hit && Date.now() - hit.at < TTL) return send(hit);
   let job = rendering.get(key);
@@ -150,7 +151,7 @@ async function render(base: string): Promise<Card> {
             <div style={{ display: "flex", flexDirection: "column", maxWidth: 500 }}>
               <div style={{ fontSize: 38, fontWeight: 900, lineHeight: 1.1, letterSpacing: -0.5 }}>{name}</div>
               <div style={{ fontSize: 20, fontWeight: 700, color: pop, textTransform: "uppercase", letterSpacing: 3, marginTop: 6 }}>
-                Sweepstakes & Social Casino
+                Sweepstakes Gaming
               </div>
             </div>
           </div>

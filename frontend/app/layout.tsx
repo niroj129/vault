@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { cookies } from "next/headers";
@@ -19,6 +20,14 @@ import type { BusinessInfo, Category, PaymentMethodInfo, SiteSettings } from "@/
 // MASTER typography: Inter for headings and body (next/font: self-hosted, swap, no layout shift)
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 
+/** Changes whenever what the card shows changes, so Facebook & co. fetch a fresh image
+    instead of reusing a cached (possibly failed) copy of the old URL. */
+const CARD_DESIGN = 2;
+function cardVersion(s: SiteSettings) {
+  const seen = [CARD_DESIGN, s.site_name, s.tagline, s.logo, s.color_primary, s.color_secondary, s.color_accent];
+  return createHash("sha1").update(JSON.stringify(seen)).digest("hex").slice(0, 8);
+}
+
 export async function generateMetadata(): Promise<Metadata> {
   const [settings, SITE_URL] = await Promise.all([getJSONSafe<SiteSettings>("/settings/", {}), siteUrl()]);
   const name = settings.site_name || "Casino";
@@ -27,17 +36,18 @@ export async function generateMetadata(): Promise<Metadata> {
   // SVG is never used here — Facebook, X, WhatsApp and iMessage don't render it.
   const preview = settings.social_preview && !/\.svg($|\?)/i.test(settings.social_preview)
     ? { url: settings.social_preview, alt: name }
-    : { url: "/og", width: 1200, height: 630, alt: `${name} — ${tagline}` };
+    : { url: `/og?v=${cardVersion(settings)}`, width: 1200, height: 630, type: "image/jpeg", alt: `${name} — ${tagline}` };
+  const previewText = "Juwa, Game Vault, Orion Stars & more. Real agents 24/7 — fast loads, fast cash outs.";
   return {
     metadataBase: new URL(SITE_URL),
     title: { default: `${name} — ${tagline}`, template: `%s | ${name}` },
-    description: `${name} is your sweepstakes & social casino hub. Get game links, agent info and guides for Juwa, Game Vault, Orion Stars, Fire Kirin and more.`,
+    description: `${name} is your sweepstakes gaming hub. Get game links, agent info and guides for Juwa, Game Vault, Orion Stars, Fire Kirin and more.`,
     keywords: ["sweepstakes casino", "social casino", "fish games", "slot games", "Juwa", "Game Vault", "Orion Stars", "Fire Kirin", "casino agents"],
     openGraph: {
-      type: "website", siteName: name, url: SITE_URL, title: `${name} — Sweepstakes & Social Casino`, description: tagline,
+      type: "website", siteName: name, url: SITE_URL, title: `${name} — ${tagline}`, description: previewText,
       images: [preview],
     },
-    twitter: { card: "summary_large_image", title: `${name} — Sweepstakes & Social Casino`, description: tagline, images: [preview] },
+    twitter: { card: "summary_large_image", title: `${name} — ${tagline}`, description: previewText, images: [preview] },
     robots: { index: true, follow: true },
     icons: { icon: settings.favicon || "/icon.svg" },
     verification: settings.gsc_verification ? { google: String(settings.gsc_verification) } : undefined,
