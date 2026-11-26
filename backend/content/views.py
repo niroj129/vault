@@ -108,7 +108,8 @@ class SiteSettingsView(APIView):
 
     # Safe for anyone to read; everything else (API keys, tokens) is admin-only.
     PUBLIC_FIELDS = {"site_name", "tagline", "logo", "favicon",
-                     "social_preview", "color_primary", "color_secondary",
+                     "social_preview", "preview_headline", "preview_highlights",
+                     "preview_games", "color_primary", "color_secondary",
                      "color_accent", "currency", "signup_url",
                      "maintenance_mode", "analytics_id", "gsc_verification",
                      "allow_signup", "redeem_enabled",

@@ -13,6 +13,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/lib/auth";
 import { brandCss } from "@/lib/brand";
+import { previewDescription, previewHeadline, previewPayments } from "@/lib/preview";
 import { MessengerProvider } from "@/lib/messenger";
 import { getJSONSafe, siteUrl } from "@/lib/server-api";
 import type { BusinessInfo, Category, PaymentMethodInfo, SiteSettings } from "@/lib/types";
@@ -22,32 +23,36 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "sw
 
 /** Changes whenever what the card shows changes, so Facebook & co. fetch a fresh image
     instead of reusing a cached (possibly failed) copy of the old URL. */
-const CARD_DESIGN = 2;
-function cardVersion(s: SiteSettings) {
-  const seen = [CARD_DESIGN, s.site_name, s.tagline, s.logo, s.color_primary, s.color_secondary, s.color_accent];
+const CARD_DESIGN = 3;
+function cardVersion(s: SiteSettings, methods: PaymentMethodInfo[]) {
+  const seen = [CARD_DESIGN, s.site_name, s.tagline, s.logo, s.color_primary, s.color_secondary, s.color_accent,
+    s.preview_headline, s.preview_highlights, s.preview_games, s.bp_methods, previewPayments(s, methods)];
   return createHash("sha1").update(JSON.stringify(seen)).digest("hex").slice(0, 8);
 }
 
 export async function generateMetadata(): Promise<Metadata> {
-  const [settings, SITE_URL] = await Promise.all([getJSONSafe<SiteSettings>("/settings/", {}), siteUrl()]);
+  const [settings, methods, SITE_URL] = await Promise.all([
+    getJSONSafe<SiteSettings>("/settings/", {}), getJSONSafe<PaymentMethodInfo[]>("/payment-methods/", []), siteUrl(),
+  ]);
   const name = settings.site_name || "Casino";
   const tagline = settings.tagline || "Play premium sweepstakes games.";
+  const headline = previewHeadline(settings);
   // Link-preview card: an uploaded image wins, else the generated 1200×630 card (app/og/route.tsx).
   // SVG is never used here — Facebook, X, WhatsApp and iMessage don't render it.
   const preview = settings.social_preview && !/\.svg($|\?)/i.test(settings.social_preview)
     ? { url: settings.social_preview, alt: name }
-    : { url: `/og?v=${cardVersion(settings)}`, width: 1200, height: 630, type: "image/jpeg", alt: `${name} — ${tagline}` };
-  const previewText = "Juwa, Game Vault, Orion Stars & more. Real agents 24/7 — fast loads, fast cash outs.";
+    : { url: `/og?v=${cardVersion(settings, methods)}`, width: 1200, height: 630, type: "image/jpeg", alt: `${name} — ${headline}` };
+  const previewText = previewDescription(settings, methods);
   return {
     metadataBase: new URL(SITE_URL),
     title: { default: `${name} — ${tagline}`, template: `%s | ${name}` },
     description: `${name} is your sweepstakes gaming hub. Get game links, agent info and guides for Juwa, Game Vault, Orion Stars, Fire Kirin and more.`,
     keywords: ["sweepstakes casino", "social casino", "fish games", "slot games", "Juwa", "Game Vault", "Orion Stars", "Fire Kirin", "casino agents"],
     openGraph: {
-      type: "website", siteName: name, url: SITE_URL, title: `${name} — ${tagline}`, description: previewText,
+      type: "website", siteName: name, url: SITE_URL, title: `${name} — ${headline}`, description: previewText,
       images: [preview],
     },
-    twitter: { card: "summary_large_image", title: `${name} — ${tagline}`, description: previewText, images: [preview] },
+    twitter: { card: "summary_large_image", title: `${name} — ${headline}`, description: previewText, images: [preview] },
     robots: { index: true, follow: true },
     icons: { icon: settings.favicon || "/icon.svg" },
     verification: settings.gsc_verification ? { google: String(settings.gsc_verification) } : undefined,

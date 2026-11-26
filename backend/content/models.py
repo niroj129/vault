@@ -74,6 +74,13 @@ class SiteSettings(SingletonModel):
     logo = models.ImageField(upload_to="site/", blank=True, null=True)
     favicon = models.ImageField(upload_to="site/", blank=True, null=True)
     social_preview = models.ImageField(upload_to="site/", blank=True, null=True)
+    # Generated link-preview card (frontend /og) — all optional
+    preview_headline = models.CharField(
+        max_length=80, blank=True, help_text="Big line on the link preview, e.g. 100% Bonus Available. Empty: the tagline")
+    preview_highlights = models.CharField(
+        max_length=200, blank=True, help_text="Short selling points, comma-separated, e.g. Open 24/7, All Payment Methods")
+    preview_games = models.TextField(
+        blank=True, help_text="Game names to list on the preview, one per line or comma-separated. Empty: game art from the catalog")
     color_primary = models.CharField(max_length=9, default="#0B0920")
     color_secondary = models.CharField(max_length=9, default="#A996FF")
     color_accent = models.CharField(max_length=9, default="#7B61FF")

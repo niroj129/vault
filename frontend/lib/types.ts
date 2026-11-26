@@ -108,6 +108,9 @@ export interface SiteSettings {
   logo?: string | null;
   favicon?: string | null;
   social_preview?: string | null;
+  preview_headline?: string;
+  preview_highlights?: string;
+  preview_games?: string;
   color_primary?: string;
   color_secondary?: string;
   color_accent?: string;

@@ -2,8 +2,9 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ImageResponse } from "next/og";
 import { contrast, effectiveAccent } from "@/lib/brand";
+import { previewGames, previewHeadline, previewHighlights, previewPayments } from "@/lib/preview";
 import { getJSONSafe, siteUrl } from "@/lib/server-api";
-import type { Game, SiteSettings } from "@/lib/types";
+import type { Game, PaymentMethodInfo, SiteSettings } from "@/lib/types";
 
 /* Link-preview card (Open Graph / X / WhatsApp / iMessage), 1200×630 JPEG.
    Built per site from its own name, tagline, colours, logo and featured game
@@ -85,13 +86,17 @@ export async function GET(req: Request) {
 }
 
 async function render(base: string): Promise<Card> {
-  const [settings, featured, all] = await Promise.all([
+  const [settings, featured, all, methods] = await Promise.all([
     getJSONSafe<SiteSettings>("/settings/", {}),
     getJSONSafe<Game[]>("/games/?featured=1", []),
     getJSONSafe<Game[]>("/games/", []),
+    getJSONSafe<PaymentMethodInfo[]>("/payment-methods/", []),
   ]);
   const name = settings.site_name || "Casino";
-  const tagline = settings.tagline || "Play premium sweepstakes games.";
+  const tagline = previewHeadline(settings);
+  const listed = previewGames(settings);
+  const points = previewHighlights(settings);
+  const pays = previewPayments(settings, methods);
   const host = new URL(base).host;
 
   // Background: the site's own primary when it is dark enough for white text, else night.
@@ -106,7 +111,8 @@ async function render(base: string): Promise<Card> {
   const onPop = contrast("#FFFFFF", pop) >= contrast(NIGHT, pop) ? "#FFFFFF" : NIGHT;
 
   const pool = [...featured, ...all.filter((g) => !featured.some((f) => f.id === g.id))];
-  const picks = pool.filter((g) => g.thumbnail).slice(0, 4);
+  // a typed game list replaces the game art
+  const picks = listed.length ? [] : pool.filter((g) => g.thumbnail).slice(0, 4);
   const [tw, th] = picks.length === 1 ? [300, 400] : [198, 264];
   const [logo, ...thumbs] = await Promise.all([
     dataUri(settings.logo, base, 92, 92),
@@ -114,40 +120,46 @@ async function render(base: string): Promise<Card> {
   ]);
   const art = thumbs.filter((t): t is string => !!t);
   const gameNames = (picks.length ? picks : pool).slice(0, 3).map((g) => g.name);
-  const sub = gameNames.length
-    ? `${gameNames.join(", ")} & more. Real agents 24/7 — fast loads, fast cash outs.`
+  const sub = points.length ? points.join(" · ")
+    : gameNames.length ? `${gameNames.join(", ")} & more. Real agents 24/7 — fast loads, fast cash outs.`
     : "Fish tables, slots & keno. Real agents 24/7 — fast loads, fast cash outs.";
 
   const headSize = tagline.length > 34 ? 60 : tagline.length > 22 ? 70 : 80;
   const tilt = [-7, 5, -4, 8];
 
+  const logoTile = (size: number) => logo ? (
+    <div style={{ display: "flex", width: size, height: size, borderRadius: size / 4, overflow: "hidden", flexShrink: 0,
+      backgroundColor: "#FFFFFF", border: `3px solid ${pop}` }}>
+      <img src={logo} alt="" width={size} height={size} style={{ objectFit: "cover" }} />
+    </div>
+  ) : (
+    <div style={{ width: size, height: size, borderRadius: size / 4, backgroundColor: pop, color: onPop, flexShrink: 0,
+      display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.56, fontWeight: 900 }}>
+      {name.charAt(0).toUpperCase()}
+    </div>
+  );
+  const glows = (
+    <>
+      <div style={{ position: "absolute", top: -260, right: -160, width: 820, height: 820, borderRadius: 9999,
+        backgroundImage: `radial-gradient(circle, ${glow}88 0%, ${glow}00 68%)`, display: "flex" }} />
+      <div style={{ position: "absolute", bottom: -320, left: -220, width: 760, height: 760, borderRadius: 9999,
+        backgroundImage: `radial-gradient(circle, ${pop}40 0%, ${pop}00 70%)`, display: "flex" }} />
+    </>
+  );
+
   const png = new ImageResponse(
-    (
+    listed.length ? listCard() : (
       <div style={{
         width: W, height: H, display: "flex", position: "relative", overflow: "hidden",
         backgroundColor: bg, fontFamily: "Inter", color: "#FFFFFF",
       }}>
-        {/* brand glows */}
-        <div style={{ position: "absolute", top: -260, right: -160, width: 820, height: 820, borderRadius: 9999,
-          backgroundImage: `radial-gradient(circle, ${glow}88 0%, ${glow}00 68%)`, display: "flex" }} />
-        <div style={{ position: "absolute", bottom: -320, left: -220, width: 760, height: 760, borderRadius: 9999,
-          backgroundImage: `radial-gradient(circle, ${pop}40 0%, ${pop}00 70%)`, display: "flex" }} />
+        {glows}
 
         {/* left: brand + message */}
         <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between",
           width: art.length ? 660 : W, padding: "64px 0 60px 72px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
-            {logo ? (
-              <div style={{ display: "flex", width: 92, height: 92, borderRadius: 24, overflow: "hidden",
-                backgroundColor: "#FFFFFF", border: `3px solid ${pop}` }}>
-                <img src={logo} alt="" width={92} height={92} style={{ objectFit: "cover" }} />
-              </div>
-            ) : (
-              <div style={{ width: 92, height: 92, borderRadius: 24, backgroundColor: pop, color: onPop,
-                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 52, fontWeight: 900 }}>
-                {name.charAt(0).toUpperCase()}
-              </div>
-            )}
+            {logoTile(92)}
             <div style={{ display: "flex", flexDirection: "column", maxWidth: 500 }}>
               <div style={{ fontSize: 38, fontWeight: 900, lineHeight: 1.1, letterSpacing: -0.5 }}>{name}</div>
               <div style={{ fontSize: 20, fontWeight: 700, color: pop, textTransform: "uppercase", letterSpacing: 3, marginTop: 6 }}>
@@ -189,6 +201,68 @@ async function render(base: string): Promise<Card> {
     ),
     { width: W, height: H, fonts: await fonts },
   );
+
+  /** Card for a typed game list: headline, selling points, every game name, payment apps. */
+  function listCard() {
+    const MAX = 36;
+    const shown = listed.length > MAX ? listed.slice(0, MAX - 1) : listed;
+    const more = listed.length - shown.length;
+    // fewer games → bigger pills
+    const [fs, pad, gap] = listed.length > 28 ? [19, "7px 14px", 9] : listed.length > 16 ? [22, "9px 18px", 11] : [26, "11px 22px", 14];
+    const pct = tagline.match(/^(\S*\d\S*%?)\s+(.*)$/);  // "100% Bonus…" → highlight the number
+    const pill = { display: "flex", fontSize: fs, fontWeight: 700, padding: pad, borderRadius: 9999,
+      backgroundColor: "#FFFFFF14", border: "1.5px solid #FFFFFF2E", color: "#FFFFFFEB" } as const;
+    return (
+      <div style={{ width: W, height: H, display: "flex", flexDirection: "column", position: "relative", overflow: "hidden",
+        backgroundColor: bg, fontFamily: "Inter", color: "#FFFFFF", padding: "44px 60px 40px" }}>
+        {glows}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+            {logoTile(64)}
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <div style={{ fontSize: 30, fontWeight: 900, letterSpacing: -0.5 }}>{name}</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: pop, textTransform: "uppercase", letterSpacing: 3, marginTop: 2 }}>
+                Sweepstakes Gaming
+              </div>
+            </div>
+          </div>
+          <div style={{ display: "flex", fontSize: 21, fontWeight: 700, color: "#FFFFFFB3" }}>{host}</div>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", marginTop: 22, fontSize: 66, fontWeight: 900,
+          lineHeight: 1.04, letterSpacing: -2 }}>
+          {pct ? <><span style={{ color: pop }}>{pct[1]}</span><span>&nbsp;{pct[2]}</span></> : tagline}
+        </div>
+
+        {points.length > 0 && (
+          <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
+            {points.map((p) => (
+              <div key={p} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 22, fontWeight: 900,
+                padding: "9px 20px", borderRadius: 9999, backgroundColor: pop, color: onPop }}>
+                <div style={{ display: "flex", width: 9, height: 9, borderRadius: 9999, backgroundColor: onPop }} />
+                {p}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display: "flex", flexWrap: "wrap", alignContent: "flex-start", gap, marginTop: 22, flexGrow: 1 }}>
+          {shown.map((g) => <div key={g} style={pill}>{g}</div>)}
+          {more > 0 && <div style={{ ...pill, color: pop, borderColor: pop }}>+{more} more</div>}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 24 }}>
+          <div style={{ display: "flex", fontSize: 21, fontWeight: 700, color: "#FFFFFFB3" }}>
+            {pays.length ? `Pay with ${pays.join(" · ")}` : "Real agents online 24/7"}
+          </div>
+          <div style={{ display: "flex", flexShrink: 0, backgroundColor: pop, color: onPop, fontSize: 23, fontWeight: 900,
+            padding: "13px 30px", borderRadius: 9999 }}>
+            Play now&nbsp;→
+          </div>
+        </div>
+      </div>
+    );
+  }
   const raw = new Uint8Array(await png.arrayBuffer());
   // ~600 KB as PNG; WhatsApp drops previews much over 300 KB, so send JPEG when sharp is here
   const sharp = await loadSharp();
