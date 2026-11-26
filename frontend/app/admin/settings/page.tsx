@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Bell, ChevronDown, ImagePlus, Layers, Pencil, Phone, Save, Scale, Search, Star, Undo2, Users, type LucideIcon } from "lucide-react";
+import { Bell, ChevronDown, Download, ImagePlus, Layers, Pencil, Phone, Save, Scale, Search, Star, Undo2, Users, type LucideIcon } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm, type Control } from "react-hook-form";
@@ -268,6 +268,7 @@ export default function AdminSettings() {
                           <FieldDescription>Text on your main colour is switched to black or white automatically so it stays readable.</FieldDescription>
                         </div>
                       )}
+                      {sec.id === "brand" && <AdImages site={site} />}
                     </CardContent>
                   </>
                 )}
@@ -287,5 +288,43 @@ export default function AdminSettings() {
         </>}
       </div>
     </form>
+  );
+}
+
+/* The link-preview card in ad / post sizes (app/og). A link preview is always a wide 1.91:1
+   strip; an uploaded square or 4:5 image shows far bigger in a phone feed. */
+const AD_SIZES = [
+  { size: "portrait", label: "Tall 4:5", dims: "1080×1350", use: "Feed ads — biggest on phones" },
+  { size: "square", label: "Square 1:1", dims: "1080×1080", use: "Feed ads & posts" },
+  { size: "story", label: "Story 9:16", dims: "1080×1920", use: "Stories & Reels" },
+  { size: "wide", label: "Link 1.91:1", dims: "1200×630", use: "Link ads" },
+] as const;
+
+function AdImages({ site }: { site: Record<string, unknown> }) {
+  // the saved settings → a version, so each download shows what was last saved
+  const v = useMemo(() => {
+    const src = JSON.stringify(["site_name", "tagline", "logo", "color_primary", "color_secondary", "color_accent",
+      "preview_headline", "preview_highlights", "preview_games", "bp_methods"].map((k) => site[k]));
+    let h = 5381;
+    for (let i = 0; i < src.length; i++) h = ((h << 5) + h + src.charCodeAt(i)) | 0;
+    return (h >>> 0).toString(36);
+  }, [site]);
+  return (
+    <div className="grid gap-2">
+      <p className="text-sm font-medium" id="ad-images">Ad & post images</p>
+      <FieldDescription>Built from the fields above (save first). Upload one in Ads Manager instead of relying on the link preview — the tall one fills the most of a phone screen.</FieldDescription>
+      <ul aria-labelledby="ad-images" className="grid gap-2 sm:grid-cols-2">
+        {AD_SIZES.map((a) => (
+          <li key={a.size}>
+            <a href={`/og?size=${a.size}&v=${v}`} download={`ad-${a.size}-${a.dims}.jpg`} target="_blank" rel="noopener"
+              className="flex min-h-11 items-center gap-3 rounded-lg border px-3 py-2 text-sm transition-colors duration-150 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
+              <Download className="size-4 shrink-0 text-brand-text" aria-hidden />
+              <span className="grid flex-1"><b>{a.label} <span className="font-normal tabular-nums text-muted-foreground">{a.dims}</span></b>
+                <span className="text-muted-foreground">{a.use}</span></span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

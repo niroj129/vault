@@ -15,6 +15,15 @@ export const dynamic = "force-dynamic";
 
 const W = 1200;
 const H = 630;
+/* ?size= — "wide" is the link preview; the others are for uploading as ad / post images,
+   which show much bigger in a phone feed than a 1.91:1 link card. k scales the type. */
+const SIZES = {
+  wide: { w: W, h: H, k: 1 },
+  square: { w: 1080, h: 1080, k: 1.3 },
+  portrait: { w: 1080, h: 1350, k: 1.45 },
+  story: { w: 1080, h: 1920, k: 1.65 },
+} as const;
+type Size = keyof typeof SIZES;
 const NIGHT = "#0F172A";
 const hexRe = /^#[0-9a-f]{6}$/i;
 
@@ -70,12 +79,14 @@ const send = (c: Card) => new Response(c.body.slice(), { headers: { "Content-Typ
 export async function GET(req: Request) {
   const base = await siteUrl();
   // ?v= changes with the site's name/tagline/logo/colours (see layout), so a new version renders fresh
-  const key = `${new URL(base).host}|${new URL(req.url).searchParams.get("v") || ""}`;
+  const q = new URL(req.url).searchParams;
+  const size: Size = (q.get("size") || "") in SIZES ? (q.get("size") as Size) : "wide";
+  const key = `${new URL(base).host}|${q.get("v") || ""}|${size}`;
   const hit = cards.get(key);
   if (hit && Date.now() - hit.at < TTL) return send(hit);
   let job = rendering.get(key);
   if (!job) {
-    job = render(base)
+    job = render(base, size)
       .then((c) => { cards.set(key, c); return c; })
       .finally(() => rendering.delete(key));
     rendering.set(key, job);
@@ -85,7 +96,8 @@ export async function GET(req: Request) {
   return send(await job);
 }
 
-async function render(base: string): Promise<Card> {
+async function render(base: string, size: Size): Promise<Card> {
+  const { w: cw, h: ch, k } = SIZES[size];
   const [settings, featured, all, methods] = await Promise.all([
     getJSONSafe<SiteSettings>("/settings/", {}),
     getJSONSafe<Game[]>("/games/?featured=1", []),
@@ -94,9 +106,10 @@ async function render(base: string): Promise<Card> {
   ]);
   const name = settings.site_name || "Casino";
   const tagline = previewHeadline(settings);
-  const listed = previewGames(settings);
+  const typed = previewGames(settings);
   const points = previewHighlights(settings);
-  const pays = previewPayments(settings, methods);
+  // non-breaking spaces keep "Google Pay" on one line when the list wraps
+  const pays = previewPayments(settings, methods).map((p) => p.replace(/ /g, "\u00a0"));
   const host = new URL(base).host;
 
   // Background: the site's own primary when it is dark enough for white text, else night.
@@ -111,6 +124,8 @@ async function render(base: string): Promise<Card> {
   const onPop = contrast("#FFFFFF", pop) >= contrast(NIGHT, pop) ? "#FFFFFF" : NIGHT;
 
   const pool = [...featured, ...all.filter((g) => !featured.some((f) => f.id === g.id))];
+  // ad sizes always list game names (the catalog's when none are typed)
+  const listed = typed.length || size === "wide" ? typed : pool.map((g) => g.name);
   // a typed game list replaces the game art
   const picks = listed.length ? [] : pool.filter((g) => g.thumbnail).slice(0, 4);
   const [tw, th] = picks.length === 1 ? [300, 400] : [198, 264];
@@ -148,7 +163,7 @@ async function render(base: string): Promise<Card> {
   );
 
   const png = new ImageResponse(
-    listed.length ? listCard() : (
+    listed.length || size !== "wide" ? listCard() : (
       <div style={{
         width: W, height: H, display: "flex", position: "relative", overflow: "hidden",
         backgroundColor: bg, fontFamily: "Inter", color: "#FFFFFF",
@@ -199,7 +214,7 @@ async function render(base: string): Promise<Card> {
         )}
       </div>
     ),
-    { width: W, height: H, fonts: await fonts },
+    { width: cw, height: ch, fonts: await fonts },
   );
 
   /** Card for a typed game list: headline, selling points, every game name, payment apps. */
@@ -207,59 +222,83 @@ async function render(base: string): Promise<Card> {
     const MAX = 36;
     const shown = listed.length > MAX ? listed.slice(0, MAX - 1) : listed;
     const more = listed.length - shown.length;
+    const r = (n: number) => Math.round(n * k);
+    const wide = size === "wide";
     // fewer games → bigger pills
-    const [fs, pad, gap] = listed.length > 28 ? [19, "7px 14px", 9] : listed.length > 16 ? [22, "9px 18px", 11] : [26, "11px 22px", 14];
+    const [f0, py, px, g0] = listed.length > 28 ? [19, 7, 14, 9] : listed.length > 16 ? [22, 9, 18, 11] : [26, 11, 22, 14];
+    const [fs, pad, gap] = [r(f0), `${r(py)}px ${r(px)}px`, r(g0)];
     const pct = tagline.match(/^(\S*\d\S*%?)\s+(.*)$/);  // "100% Bonus…" → highlight the number
     const pill = { display: "flex", fontSize: fs, fontWeight: 700, padding: pad, borderRadius: 9999,
       backgroundColor: "#FFFFFF14", border: "1.5px solid #FFFFFF2E", color: "#FFFFFFEB" } as const;
     return (
-      <div style={{ width: W, height: H, display: "flex", flexDirection: "column", position: "relative", overflow: "hidden",
-        backgroundColor: bg, fontFamily: "Inter", color: "#FFFFFF", padding: "44px 60px 40px" }}>
+      <div style={{ width: cw, height: ch, display: "flex", flexDirection: "column", position: "relative", overflow: "hidden",
+        backgroundColor: bg, fontFamily: "Inter", color: "#FFFFFF",
+        // story: keep clear of the profile bar on top and the reply box at the bottom
+        padding: size === "story" ? "200px 64px 260px" : wide ? "44px 60px 40px" : "60px 60px 56px" }}>
         {glows}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
-            {logoTile(64)}
+            {logoTile(r(64))}
             <div style={{ display: "flex", flexDirection: "column" }}>
-              <div style={{ fontSize: 30, fontWeight: 900, letterSpacing: -0.5 }}>{name}</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: pop, textTransform: "uppercase", letterSpacing: 3, marginTop: 2 }}>
+              <div style={{ fontSize: r(30), fontWeight: 900, letterSpacing: -0.5 }}>{name}</div>
+              <div style={{ fontSize: r(16), fontWeight: 700, color: pop, textTransform: "uppercase", letterSpacing: 3, marginTop: 2 }}>
                 Sweepstakes Gaming
               </div>
             </div>
           </div>
-          <div style={{ display: "flex", fontSize: 21, fontWeight: 700, color: "#FFFFFFB3" }}>{host}</div>
+          {wide && <div style={{ display: "flex", fontSize: 21, fontWeight: 700, color: "#FFFFFFB3" }}>{host}</div>}
         </div>
 
-        <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", marginTop: 22, fontSize: 66, fontWeight: 900,
+        <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", marginTop: r(22), fontSize: r(66), fontWeight: 900,
           lineHeight: 1.04, letterSpacing: -2 }}>
-          {pct ? <><span style={{ color: pop }}>{pct[1]}</span><span>&nbsp;{pct[2]}</span></> : tagline}
+          {/* one item per word so a long headline wraps instead of running off the card */}
+          {tagline.split(/\s+/).map((w, i) => (
+            <span key={i} style={{ marginRight: r(18), color: pct && i === 0 ? pop : "#FFFFFF" }}>{w}</span>
+          ))}
         </div>
 
         {points.length > 0 && (
-          <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: r(12), marginTop: r(16) }}>
             {points.map((p) => (
-              <div key={p} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 22, fontWeight: 900,
-                padding: "9px 20px", borderRadius: 9999, backgroundColor: pop, color: onPop }}>
-                <div style={{ display: "flex", width: 9, height: 9, borderRadius: 9999, backgroundColor: onPop }} />
+              <div key={p} style={{ display: "flex", alignItems: "center", gap: r(10), fontSize: r(22), fontWeight: 900,
+                padding: `${r(9)}px ${r(20)}px`, borderRadius: 9999, backgroundColor: pop, color: onPop }}>
+                <div style={{ display: "flex", width: r(9), height: r(9), borderRadius: 9999, backgroundColor: onPop }} />
                 {p}
               </div>
             ))}
           </div>
         )}
 
-        <div style={{ display: "flex", flexWrap: "wrap", alignContent: "flex-start", gap, marginTop: 22, flexGrow: 1 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", alignContent: wide ? "flex-start" : "center", gap, marginTop: r(22),
+          marginBottom: wide ? 0 : r(22), flexGrow: 1 }}>
           {shown.map((g) => <div key={g} style={pill}>{g}</div>)}
           {more > 0 && <div style={{ ...pill, color: pop, borderColor: pop }}>+{more} more</div>}
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 24 }}>
-          <div style={{ display: "flex", fontSize: 21, fontWeight: 700, color: "#FFFFFFB3" }}>
-            {pays.length ? `Pay with ${pays.join(" · ")}` : "Real agents online 24/7"}
+        {wide ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 24 }}>
+            <div style={{ display: "flex", fontSize: 21, fontWeight: 700, color: "#FFFFFFB3" }}>
+              {pays.length ? `Pay with ${pays.join(" · ")}` : "Real agents online 24/7"}
+            </div>
+            <div style={{ display: "flex", flexShrink: 0, backgroundColor: pop, color: onPop, fontSize: 23, fontWeight: 900,
+              padding: "13px 30px", borderRadius: 9999 }}>
+              Play now&nbsp;→
+            </div>
           </div>
-          <div style={{ display: "flex", flexShrink: 0, backgroundColor: pop, color: onPop, fontSize: 23, fontWeight: 900,
-            padding: "13px 30px", borderRadius: 9999 }}>
-            Play now&nbsp;→
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: r(14) }}>
+            {pays.length > 0 && (
+              <div style={{ display: "flex", fontSize: r(20), fontWeight: 700, color: "#FFFFFFB3" }}>{`Pay with ${pays.join(" · ")}`}</div>
+            )}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 24 }}>
+              <div style={{ display: "flex", fontSize: r(22), fontWeight: 900, color: "#FFFFFF" }}>{host}</div>
+              <div style={{ display: "flex", flexShrink: 0, backgroundColor: pop, color: onPop, fontSize: r(23), fontWeight: 900,
+                padding: `${r(13)}px ${r(30)}px`, borderRadius: 9999 }}>
+                Play now&nbsp;→
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     );
   }
